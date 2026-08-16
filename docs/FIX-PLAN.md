@@ -59,3 +59,4 @@
 | npm 包 | `npm pack --dry-run` | ✅ 0.2.0 / 14 文件 / 44.6kB，无 test、.dev-patch.yml 泄漏 |
 | 组合挂载 | `dsh --profile web --patch .dev-patch.yml --dump-config` | ✅ 补丁层出现在组合配置尾部（v0.1 时已验，v0.2 同路径复验） |
 | CI | `.github/workflows/ci.yml` | 已配置三平台 × Node 22/24；推送后由 GitHub Actions 执行 |
+| CI 首轮红叉（推送后追加修复） | 首轮 6 个矩阵位 `client` 测试全挂：Node 21+ 内置 `navigator.language` 跟随系统区域，英文 runner 上 i18n 正确选择英文（`'Security checkup' ≠ '安全体检'` 断言失败）——测试不确定，非产品 bug | ✅ 修复：测试显式固定 `navigator.language`（zh-CN 主断言 + en-US 追加断言），任何区域下确定性通过 |
