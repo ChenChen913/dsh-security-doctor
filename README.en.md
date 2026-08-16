@@ -28,7 +28,7 @@ dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0
 
 Running DSH from a source checkout (no global `dsh`)? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0` or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0`.
 
-Install self-verification: `curl http://127.0.0.1:3080/dsh-security-doctor/self-test` should return `{"ok":true,...}`, and the browser console should log `[dsh-security-doctor] client loaded; host self-test: v0.2.0`.
+Install self-verification: `curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test` should return `{"ok":true,...}`, and the browser console should log `[dsh-security-doctor] client loaded; host self-test: v0.2.1`. (Since v0.2.1 both routes require this pairing header — a custom header cannot be attached by another origin without a CORS preflight this server never grants, so other local pages cannot read your report cross-site.)
 
 ## How it works
 
@@ -42,6 +42,10 @@ Install self-verification: `curl http://127.0.0.1:3080/dsh-security-doctor/self-
 ## Data flow in one glance
 
 **Reads**: `~/.dsh` config/dependency manifests, credential-file **permission bits and ACL account names only** (never contents), workspace instruction-file names+hashes, external plugin source text, service presence/policy, `DEEPSEEK_BASE_URL` hostname. **Writes**: no files; browser localStorage only (history, hash snapshots). **Sends**: nothing — the only network traffic is two localhost GET routes from the page to your own dsh web.
+
+## Security commitments (physician, heal thyself)
+
+This plugin audits other plugins, so it audits **itself first** with the same published T1–T10 standard: the full self-audit report (findings S1–S3, fixes, and test evidence) is public at [docs/SELF-AUDIT.md](docs/SELF-AUDIT.md); the policy lives in [SECURITY.md](SECURITY.md). Hard guarantees: read-only (single fixed-argument `icacls` read-only query aside); zero egress (two localhost GET routes, pairing-header guarded); zero credential exposure (bits/ACL only, echoed lines auto-redacted, leak-free asserted by tests); zero runtime dependencies, no install scripts, no build step; SHA-pinned CI actions. Verify: `node test/smoke.mjs && node test/host.mjs && node test/client.mjs`.
 
 ## Extras
 

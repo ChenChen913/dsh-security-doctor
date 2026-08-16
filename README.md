@@ -38,10 +38,10 @@
 ### 常规安装（已安装 dsh）
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.1
 ```
 
-（`#v0.2.0` 锁定版本标签；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`。）
+（`#v0.2.1` 锁定版本标签；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`。）
 
 ### 源码 checkout 运行的 DSH（无全局 `dsh` 命令）
 
@@ -49,19 +49,19 @@ dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0
 
 ```bash
 # pnpm 可用时
-pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0
+pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.1
 
 # 或直接走 CLI 入口
-node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.0
+node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.2.1
 ```
 
 ### 安装自检（装没装上，一条命令确认）
 
 ```bash
-curl http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin":"dsh-security-doctor","version":"0.2.0",...}
+curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin":"dsh-security-doctor","version":"0.2.1",...}
 ```
 
-三查：① 上面 self-test 返回 `ok:true`；② 浏览器控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.2.0`；③ 侧栏底部出现「安全体检」按钮。
+三查：① 上面 self-test 返回 `ok:true`；② 浏览器控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.2.1`；③ 侧栏底部出现「安全体检」按钮。
 
 <details>
 <summary>手动安装（编辑 profile 文件）</summary>
@@ -70,7 +70,7 @@ curl http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin"
 // ~/.dsh/profiles/web/package.json
 {
   "dependencies": {
-    "dsh-security-doctor": "github:ChenChen913/dsh-security-doctor#v0.2.0"
+    "dsh-security-doctor": "github:ChenChen913/dsh-security-doctor#v0.2.1"
   }
 }
 ```
@@ -103,19 +103,31 @@ curl http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin"
 | **写什么** | 无文件写入。仅浏览器 localStorage（体检历史、指令文件哈希快照） |
 | **发什么** | 无任何外发。唯一网络行为是浏览器→本机 dsh web 的两个 GET 路由 |
 
-## 安全承诺（本插件自己先达标）
+## 安全承诺（打铁自身硬）
 
-- **只读**：不执行任何被检查代码，无网络外发；**唯一的外部命令是 Windows 下 `icacls <文件>` 只读 ACL 查询**（固定参数、无 shell、无用户输入拼接）。
-- **凭据零接触**：凭据文件只查权限位/ACL，内容一概不读不传不回显（测试断言覆盖）。
-- **无安装脚本、无运行时依赖、无构建**：`node --check` 即可验证。
-- **可逆**：`dsh plugin --profile web remove dsh-security-doctor` 完整卸载。
-- 详见《[安全开发指南](docs/guide-secure-development.md)》末尾的本插件达标对照。
+这个插件替用户审查别的插件，所以它**先用自己发布的检测标准审过自己**：自审报告（T1–T10 十类威胁逐条对照 + 自审发现 S1–S3 的修复与测试证据）公开在 [docs/SELF-AUDIT.md](docs/SELF-AUDIT.md)，安全政策见 [SECURITY.md](SECURITY.md)。
+
+对用户的三条硬承诺：
+
+1. **只读**：不执行被检查对象的任何代码，不改用户任何文件；唯一外部命令是 Windows 下 `icacls <文件>` 只读 ACL 查询（固定参数、无 shell、无用户输入拼接）。
+2. **零外发**：不访问任何外部域名；唯一网络行为是页面到本机 dsh web 的两个 GET 路由，且**要求配对头 `x-dsh-security-doctor: 1` 防止本机其他网页跨站读取你的体检报告**。
+3. **凭据零接触**：凭据文件只查权限位/ACL，内容一概不读不传不回显；回显的配置行自动脱敏（URL 内嵌凭据、query 密钥、`sk-`/`gh?_` 令牌）。测试含"凭据值零泄漏"专门断言，任何人可复跑。
+
+供应链：**零运行时依赖、零安装脚本、零构建**（`lib/` 即源码本体，`node --check` 可验）；CI actions 钉 commit SHA；每次推送自动跑三平台 × Node 22/24 矩阵。**验证命令**：
+
+```bash
+node test/smoke.mjs && node test/host.mjs && node test/client.mjs
+grep -rn "eval(\|new Function\|child_process" lib/   # 只有 icacls 一处 execFile
+```
+
+发现本插件的安全问题请按 [SECURITY.md](SECURITY.md) 报告，修复过程公开公示。详见《[安全开发指南](docs/guide-secure-development.md)》末尾的本插件达标对照。
 
 ## 常见问题
 
 - **安装时报 `missing peer @deepseek-ai/cordis` 警告？** v0.1 曾声明该 peer；v0.2.0 起已移除——插件运行时只用 Node 内置模块，宿主由 dsh 提供，该警告无害且不再出现。
-- **体检把 dsh-security-doctor 自己列为"未锁定"？** 0.1.x 的 github: 安装确实未锁版本；0.2.0 起报告会标注"本插件自身"并给出锁定命令，README 安装命令也已默认带 `#v0.2.0`。
+- **体检把 dsh-security-doctor 自己列为"未锁定"？** 0.1.x 的 github: 安装确实未锁版本；0.2.0 起报告会标注"本插件自身"并给出锁定命令，README 安装命令也已默认带 `#v0.2.1`。
 - **Windows 凭据检查说"无法判断"？** 0.1.x 的旧文案；0.2.0 起会用 icacls 读 ACL 列出实际可访问账户（查询失败时才回退提示）。
+- **curl 访问 `/check`/`/self-test` 返回 403？** v0.2.1 起两路由要求配对头 `x-dsh-security-doctor: 1`（防本机其他网页跨站读取你的报告），curl 加 `-H 'x-dsh-security-doctor: 1'` 即可，插件自身界面不受影响。
 
 ## 局限（诚实声明）
 

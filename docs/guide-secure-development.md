@@ -79,15 +79,17 @@
 
 ## 四、本插件（dsh-security-doctor）自身达标对照
 
+> 完整的自审过程、发现与修复记录见 [SELF-AUDIT.md](SELF-AUDIT.md)：本插件用本文档配套的《安全检测指南》T1–T10 十类威胁逐条审过自己，自审另发现 3 处可加固点（跨站读取路由、URL 凭据回显、CI tag 未钉 SHA）并已修复。
+
 | 底线 | 本插件的做法 |
 | --- | --- |
-| 1 最小权限 | 仅 `inject: ['webServer']`（宿主）+ `['slots']`（客户端）；无 shell、无 subprocess |
+| 1 最小权限 | 仅 `inject: ['webServer']`（宿主）+ `['slots']`（客户端）；无 shell；唯一子进程是 Windows `icacls` 只读 ACL 查询（execFile 固定参数，无用户输入） |
 | 2 无 `!!js` | 分发物零 `!!js`；自身也不执行被检对象的 `!!js`，只报告其存在 |
 | 3 不碰安全层 | patch 只有一行 insert 自身，不 replace 任何行 |
-| 4 网络出口 | 零出网；客户端仅 fetch 本机回环路由 |
-| 5 凭据纪律 | 凭据文件只查权限位（stat.mode），内容零读取零回显 |
-| 6 路由安全 | 单一 GET 只读路由、方法校验、无参数、无敏感内容回显（插件名/路径清单为低敏感） |
-| 7 可清理 | 样式/插槽/路由全部 effect/dispose 成对；零文件写入 |
+| 4 网络出口 | 零外部域名；客户端仅 fetch 本机回环路由 |
+| 5 凭据纪律 | 凭据文件只查权限位（stat/icacls），内容零读取零回显；回显的配置行经 `maskSecrets()` 自动脱敏（URL userinfo/query 密钥/`sk-`/`gh?_` 令牌），测试断言凭据值零泄漏 |
+| 6 路由与输入安全 | 两个无参数 GET 只读路由；方法校验；**要求配对头 `x-dsh-security-doctor: 1` + 拒绝 `Sec-Fetch-Site: cross-site`，防本机其他网页跨站读取**；响应 `no-store` 且无凭据内容 |
+| 7 可清理 | 样式/插槽/路由全部 effect/dispose 成对；零文件写入；浏览器仅 localStorage 存体检摘要与哈希 |
 | 8 无安装脚本 | 无 scripts；无构建（手写线格式，`node --check` 验证） |
-| 9 依赖卫生 | 零运行时依赖（仅 peerDependency cordis） |
-| 10 透明 | README 数据流三问（读 ~/.dsh 与工作区元数据 / 写无 / 发无）+ 局限声明 |
+| 9 依赖卫生 | 零运行时依赖；CI actions 钉 commit SHA；安装命令钉版本标签 |
+| 10 透明 | README 数据流三问 + SELF-AUDIT 数据明细表；声明之外的任何行为（含 bug 导致）都算缺陷 |

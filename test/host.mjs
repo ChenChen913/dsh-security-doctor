@@ -56,16 +56,28 @@ async function main() {
   assert.equal(byPath['/dsh-security-doctor/check'].kind, 'exact')
   assert.equal(byPath['/dsh-security-doctor/self-test'].kind, 'exact')
 
-  // method guards
+  // cross-site read guard (self-audit S1): no pairing header → 403;
+  // cross-site Sec-Fetch-Site → 403 even with the header
+  const H = { 'x-dsh-security-doctor': '1' }
+  for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test']) {
+    const noHeader = mockRes()
+    await byPath[path].handler({ method: 'GET' }, noHeader)
+    assert.equal(noHeader.code, 403, path + ' rejects missing pairing header')
+    const crossSite = mockRes()
+    await byPath[path].handler({ method: 'GET', headers: { ...H, 'sec-fetch-site': 'cross-site' } }, crossSite)
+    assert.equal(crossSite.code, 403, path + ' rejects cross-site reads')
+  }
+
+  // method guards (with the pairing header)
   for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test']) {
     const res = mockRes()
-    await byPath[path].handler({ method: 'POST' }, res)
+    await byPath[path].handler({ method: 'POST', headers: H }, res)
     assert.equal(res.code, 405, path + ' rejects POST')
   }
 
   // self-test route: proves host half loaded, reports version
   const resSelf = mockRes()
-  await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET' }, resSelf)
+  await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H }, resSelf)
   assert.equal(resSelf.code, 200)
   const self = JSON.parse(resSelf.body)
   assert.equal(self.ok, true)
@@ -78,7 +90,7 @@ async function main() {
 
   // check route with ask + workspace-write → services check passes, values shown
   const res1 = mockRes()
-  await byPath['/dsh-security-doctor/check'].handler({ method: 'GET' }, res1)
+  await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: H }, res1)
   assert.equal(res1.code, 200)
   assert.equal(res1.headers['cache-control'], 'no-store')
   const payload1 = JSON.parse(res1.body)
@@ -97,7 +109,7 @@ async function main() {
   apply(ctx2)
   const check2 = regs2.filter((r) => r.path === '/dsh-security-doctor/check')[0]
   const res2 = mockRes()
-  await check2.handler({ method: 'GET' }, res2)
+  await check2.handler({ method: 'GET', headers: H }, res2)
   const services2 = JSON.parse(res2.body).report.checks.filter((c) => c.id === 'security-services')[0]
   assert.equal(services2.severity, 'high')
   assert.match(services2.detail, /never/)
@@ -112,7 +124,7 @@ async function main() {
   apply(ctx3)
   const check3 = regs3.filter((r) => r.path === '/dsh-security-doctor/check')[0]
   const res3 = mockRes()
-  await check3.handler({ method: 'GET' }, res3)
+  await check3.handler({ method: 'GET', headers: H }, res3)
   const services3 = JSON.parse(res3.body).report.checks.filter((c) => c.id === 'security-services')[0]
   assert.equal(services3.severity, 'medium')
   assert.match(services3.detail, /sandbox/)

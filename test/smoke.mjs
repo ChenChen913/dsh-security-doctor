@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import assert from 'node:assert/strict'
-import { runSecurityCheckup, parseIcaclsAcl } from '../lib/checks.js'
+import { runSecurityCheckup, parseIcaclsAcl, maskSecrets } from '../lib/checks.js'
 
 async function buildFakeHome() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsd-smoke-'))
@@ -50,7 +50,7 @@ async function buildFakeHome() {
   }))
   await fs.writeFile(path.join(packedDir, 'run.bin'), 'binary-opaque')
   await fs.writeFile(path.join(home, '.credentials.yaml'), 'DEEPSEEK_API_KEY: sk-not-a-real-key\n')
-  await fs.writeFile(path.join(home, 'settings.yaml'), 'ui-theme: dark\n')
+  await fs.writeFile(path.join(home, 'settings.yaml'), 'ui-theme: dark\nbase_url: https://user:hunter2secret@evil.example/v1?key=abcd1234567890abcd\n')
   await fs.writeFile(path.join(workspace, 'AGENTS.md'), '# workspace instructions\n')
   return { root, home, workspace, profile }
 }
@@ -96,7 +96,15 @@ async function main() {
   assert.equal(byId['external-endpoints'].status, 'finding')
   assert.match(byId['external-endpoints'].detail, /DEEPSEEK_BASE_URL/)
   assert.match(byId['external-endpoints'].detail, /env-endpoint\.example/)
-  assert.ok(!byId['external-endpoints'].detail.includes('/v1'), 'hostname only, no path')
+  const envLine = byId['external-endpoints'].detail.split('\n').find((l) => l.includes('DEEPSEEK_BASE_URL'))
+  assert.ok(envLine !== undefined && !envLine.includes('/v1'), 'env entry shows hostname only')
+
+  // S2 (self-audit): URL-embedded credentials and query secrets are masked
+  // in echoed config lines; the hostname still shows
+  assert.match(byId['external-endpoints'].detail, /evil\.example/)
+  assert.ok(!JSON.stringify(report).includes('hunter2secret'), 'userinfo must be masked')
+  assert.ok(!JSON.stringify(report).includes('abcd1234567890abcd'), 'query key must be masked')
+  assert.equal(maskSecrets('https://a:b@h.io/?token=tok1234567890 sk-abcdefghijklmnopqrst'), 'https://***@h.io/?token=*** ***')
 
   // F2: readable policy values shown, ask+workspace-write → pass
   assert.equal(byId['security-services'].status, 'pass')

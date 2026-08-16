@@ -33,10 +33,10 @@ let capturedModule = null
 let fetchCalls = []
 globalThis.window = {
   __ModuleLoader__: { load(m) { capturedModule = m } },
-  fetch(url) {
-    fetchCalls.push(String(url))
+  fetch(url, init) {
+    fetchCalls.push({ url: String(url), init })
     if (String(url).includes('/self-test')) {
-      return Promise.resolve({ json: () => Promise.resolve({ ok: true, version: '0.2.0' }) })
+      return Promise.resolve({ json: () => Promise.resolve({ ok: true, version: '0.2.1' }) })
     }
     return Promise.resolve({ json: () => Promise.resolve({ ok: true, report: sampleReport }) })
   },
@@ -138,8 +138,11 @@ async function main() {
   const button = slot.render({ wide: true })
   assert.equal(button.type, 'button')
   assert.equal(button.props['aria-label'], '安全体检')
-  assert.ok(fetchCalls.some((u) => u.includes('/dsh-security-doctor/self-test')), 'self-test pinged on mount')
-  assert.ok(fetchCalls.some((u) => u.includes('/dsh-security-doctor/check')), 'auto checkup ran on mount')
+  assert.ok(fetchCalls.some((c) => String(c.url).includes('/dsh-security-doctor/self-test')), 'self-test pinged on mount')
+  assert.ok(fetchCalls.some((c) => String(c.url).includes('/dsh-security-doctor/check')), 'auto checkup ran on mount')
+  // every call carries the cross-site read guard pairing header (self-audit S1)
+  assert.ok(fetchCalls.length > 0 && fetchCalls.every((c) => c.init && c.init.headers && c.init.headers['x-dsh-security-doctor'] === '1'),
+    'pairing header sent on every fetch')
   assert.ok(findAll(button, (n) => n.type === 'svg').length > 0, 'shield icon rendered')
 
   // wait for the auto checkup promise chain, then re-render: modal should be open
