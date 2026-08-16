@@ -2,11 +2,11 @@
 
 English | [中文](README.md)
 
-A one-click **local security checkup plugin** for the DeepSeek Harness (DSH) Web UI: a "🛡 安全体检" (Security checkup) button in the sidebar footer that runs **read-only** checks against your local DSH environment (auto-run once on install, red badge while high findings are unacknowledged) and shows a severity-sorted report with high cards first. It never executes code from the things it checks, sends nothing anywhere by default, and needs no API key. New in v0.3: the report footer states the producing plugin version, and a manual "Check update" button queries the latest GitHub release — the plugin's only explicit egress, one request on your click only.
+A one-click **local security checkup plugin** for the DeepSeek Harness (DSH) Web UI: a "🛡 安全体检" (Security checkup) button in the sidebar footer that runs **read-only** checks against your local DSH environment (auto-run once on install, red badge while high findings are unacknowledged) and shows a severity-sorted report with high cards first. It never executes code from the things it checks, sends nothing anywhere by default, and needs no API key. v0.4 redesigns the report modal with a "Liquid Glass" look: frosted translucent panels, a circular 0–100 security score gauge, status dots + capsule counters, glass cards (high severity = side-bar accent, not a red wash), inline-SVG line icons, light/dark adaptive. Since v0.3 the report footer states the producing plugin version and a manual "Check update" button queries the latest GitHub release — the plugin's only explicit egress, one request on your click only.
 
 > Context: the official `awesome-dsh-plugin` list warns that "installing a plugin runs third-party code with your own permissions — this list is not a security review." This plugin turns "is my environment okay?" into a single click.
 
-## What it checks (v0.3)
+## What it checks (v0.4)
 
 | Check | What | Hit level |
 | --- | --- | --- |
@@ -23,12 +23,12 @@ A one-click **local security checkup plugin** for the DeepSeek Harness (DSH) Web
 > ⚠️ **Read first**: (1) a running `dsh web` does NOT hot-load new plugin layers — **restart `dsh web` after installing** or the button won't appear; (2) restarting briefly interrupts conversations in the GUI — wind down first (sessions persist on disk).
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0
 ```
 
-The `#v0.3.0` tag pins the exact released commit (reproducible, rollback-able). Running DSH from a source checkout (no global `dsh`)? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0` or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0`.
+The `#v0.4.0` tag pins the exact released commit (reproducible, rollback-able). Running DSH from a source checkout (no global `dsh`)? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0` or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0`.
 
-Install self-verification: `curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test` should return `{"ok":true,"version":"0.3.0","reportVersion":"0.3.0",...}`, and the browser console should log `[dsh-security-doctor] client loaded; host self-test: v0.3.0`. (Since v0.2.1 both routes require this pairing header — a custom header cannot be attached by another origin without a CORS preflight this server never grants, so other local pages cannot read your report cross-site.)
+Install self-verification: `curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test` should return `{"ok":true,"version":"0.4.0","reportVersion":"0.4.0",...}`, and the browser console should log `[dsh-security-doctor] client loaded; host self-test: v0.4.0`. (Since v0.2.1 both routes require this pairing header — a custom header cannot be attached by another origin without a CORS preflight this server never grants, so other local pages cannot read your report cross-site.)
 
 ## Update (incl. legacy migration & rollback)
 
@@ -66,7 +66,8 @@ Docs: [CHANGELOG](CHANGELOG.md) · [PLAN](docs/PLAN.md) · [FIX-PLAN (v0.2 feedb
 
 | Plugin | Tested harness | OS | Notes |
 | --- | --- | --- | --- |
-| v0.3.0 | DSH 0.1.0-rc.5 | Windows (source run) | macOS/Linux via CI matrix; Node ≥ 22 |
+| v0.4.0 | DSH 0.1.0-rc.5 | Windows (source run) | macOS/Linux via CI matrix; Node ≥ 22 |
+| v0.3.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 | v0.2.0 – v0.2.1 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 | v0.1.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 

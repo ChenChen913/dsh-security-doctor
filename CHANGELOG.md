@@ -4,6 +4,33 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [0.4.0] — 2026-08-16
+
+报告弹窗「液态玻璃（Liquid Glass）」界面重设计。设计源文件与规范存档于 [`界面/`](界面/DESIGN.md)（DESIGN.md + code.html 原型 + 截图）。
+
+### 新增
+
+- **总览评分环**：弹窗顶部新增环形安全评分（0–100，由 高危 −25 / 检查失败 −8 / 关注 −10 / 建议 −3 累计扣分推导），环体渐变颜色随最严重级别变化（红/琥珀/蓝/绿）；结论文字与评分同色系。复制的 Markdown 报告同步标注「安全评分: N/100」。
+- **液态玻璃视觉体系**：磨砂半透明面板（backdrop blur 24px + saturate 180% + 边缘高光内描边）、嵌套玻璃卡片、全圆角胶囊按钮（hover 上浮）、状态用 8px 彩色圆点表达（高危带光晕）而非彩色底纹色块、高危卡片改为左侧细色条强调（替代整卡红底）、渐变发丝分隔线、细滚动条、弹窗入场缩放动画（尊重 `prefers-reduced-motion`）。
+- **明暗自适应**：玻璃色调优先从宿主主题 token（`--dsw-alias-*`，经 `color-mix` 混入透明度）推导，宿主无 token 时回退静态值并跟随系统 `prefers-color-scheme`。
+
+### 变更
+
+- 图标全部改为**内联 SVG 细线图标**（1.8px 描边），移除 🛡/📋/↻/✕ 等 emoji 与 unicode 符号。**注意**：原型使用的 Material Symbols / Inter / Geist 均为 Google CDN 外部字体，与本插件"默认零外发"承诺冲突，实现时以系统字体栈与内联 SVG 等效替代——视觉效果一致，安全承诺不变。
+- 卡片级别标签从彩色底纹 chip 改为「彩色圆点 + 标题 + 灰色级别文字」，色盲用户仍可读级别文字。
+
+### 无变化（明确声明）
+
+- 功能、数据流、路由、外发口径与 v0.3.0 完全一致：无新增网络请求（图标为内联 SVG，未引入任何外部字体/CDN）；DOM 契约（`dsd-check`/`--high`/`__head`/`__title` 等）保持不变，三套测试新增 UI 断言（评分环、状态点、胶囊、pass 修饰类）后全部通过。
+
+### 实测环境
+
+| 项 | 值 |
+| --- | --- |
+| harness | DSH `0.1.0-rc.5`（Windows，源码运行） |
+| OS | Windows 实测；macOS / Linux 由 CI（ubuntu/macos/windows × Node 22/24）覆盖 |
+| Node | ≥ 22（22/24 CI 通过） |
+
 ## [0.3.0] — 2026-08-16
 
 针对用户反馈《[版本管理与分发问题](docs/feedback/2026-08-16-versioning-feedback.md)》的修复（计划与执行记录：[docs/VERSIONING-PLAN.md](docs/VERSIONING-PLAN.md)）。
@@ -60,6 +87,7 @@
 
 实测环境：DSH `0.1.0-rc.5`（Windows 源码运行）。
 
+[0.4.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.1.0...v0.2.0

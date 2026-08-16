@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AnXin Security Check - Light Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Geist:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        /* Custom styles to force light mode appearance within the requested dark mode html tag constraint */
+        body {
+            background-color: #f3f4f6; /* Light background for the preview */
+            color: #1a1c1c; /* Dark text */
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        /* Light Mode Liquid Glass for Dialog */
+        .glass-dialog {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 
+                0 4px 24px -1px rgba(0, 0, 0, 0.05),
+                0 2px 8px -1px rgba(0, 0, 0, 0.03),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        /* Light Mode Capsule Button */
+        .capsule-btn-light {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            color: #2f3131;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .capsule-btn-light:hover {
+            background: rgba(255, 255, 255, 1);
+            border-color: rgba(0, 0, 0, 0.15);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            transform: translateY(-1px);
+        }
+        .capsule-btn-light:active {
+            transform: translateY(0);
+        }
+
+        /* Primary Action Capsule */
+        .capsule-btn-primary {
+            background: #1a1c1c;
+            color: #ffffff;
+            border: 1px solid #000;
+            padding: 6px 16px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .capsule-btn-primary:hover {
+            background: #2f3131;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Glass Cards (Light) */
+        .glass-card-light {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            transition: background 0.2s ease;
+        }
+        .glass-card-light:hover {
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Status Dots */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .dot-high { background-color: #c61818; box-shadow: 0 0 6px rgba(198, 24, 24, 0.4); }
+        .dot-concern { background-color: #f59e0b; }
+        .dot-suggest { background-color: #3b82f6; }
+        .dot-info { background-color: #8e9192; }
+        .dot-passed { background-color: #10b981; }
+
+        /* Typography mapping to forced light mode colors */
+        .text-title-light { color: #1a1c1c; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+        .text-body-light { color: #454747; font-size: 13px; line-height: 1.6; }
+        .text-meta-light { color: #636565; font-size: 12px; line-height: 1.4; letter-spacing: 0.01em; }
+        
+        .code-path-light {
+            font-family: 'Geist', monospace;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.04);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #1a1c1c;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        /* Gauge Styles */
+        .gauge-svg {
+            transform: rotate(-90deg);
+        }
+        .gauge-track {
+            fill: none;
+            stroke: rgba(0,0,0,0.05);
+            stroke-width: 3;
+        }
+        .gauge-indicator {
+            fill: none;
+            stroke: url(#gauge-gradient);
+            stroke-width: 3;
+            stroke-dasharray: 283; /* 2 * pi * r (r=45) */
+            stroke-dashoffset: 42; /* 283 - (283 * 0.85) */
+            stroke-linecap: round;
+        }
+
+        /* Material Icons Line weight adjustment */
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 20;
+        }
+
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+<!-- Dialog Container -->
+<div class="glass-dialog w-full max-w-[780px] h-[600px] rounded-2xl flex flex-col relative overflow-hidden">
+<!-- Top App Bar Area (Mapped from JSON concept) -->
+<header class="flex justify-between items-center px-6 py-4 border-b border-black/5 shrink-0 bg-white/40">
+<h1 class="text-title-light">安全体检报告</h1>
+<div class="flex items-center gap-2">
+<button aria-label="Refresh" class="capsule-btn-light" data-icon="refresh">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+</button>
+<button aria-label="Prescription" class="capsule-btn-light" data-icon="medical_services">
+<span class="material-symbols-outlined text-[16px]">medical_services</span>
+</button>
+<button aria-label="Close" class="capsule-btn-light !px-2" data-icon="close">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Content Canvas -->
+<main class="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-8">
+<!-- Overview Section -->
+<section class="flex flex-col md:flex-row items-center gap-8 bg-white/30 p-6 rounded-xl border border-white/60">
+<!-- Circular Gauge -->
+<div class="relative w-[120px] h-[120px] flex-shrink-0 flex items-center justify-center">
+<svg class="gauge-svg w-full h-full absolute inset-0" viewbox="0 0 100 100">
+<defs>
+<lineargradient id="gauge-gradient" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#10b981"></stop> <!-- Green -->
+<stop offset="100%" stop-color="#f59e0b"></stop> <!-- Yellow/Orange -->
+</lineargradient>
+</defs>
+<circle class="gauge-track" cx="50" cy="50" r="45"></circle>
+<circle class="gauge-indicator" cx="50" cy="50" r="45"></circle>
+</svg>
+<div class="flex flex-col items-center justify-center z-10 text-center">
+<span class="text-4xl font-semibold tracking-tighter text-[#1a1c1c] leading-none">85</span>
+<span class="text-[10px] text-[#636565] uppercase tracking-widest mt-1">Score</span>
+</div>
+</div>
+<!-- Overview Details -->
+<div class="flex flex-col gap-4 flex-1">
+<div>
+<h2 class="text-[18px] font-medium text-[#c61818] mb-1">发现高危信号，建议立即处理</h2>
+<p class="text-meta-light">较上次：新增 1 项高危，消失 2 项建议</p>
+</div>
+<!-- Glass Capsules Row -->
+<div class="flex flex-wrap gap-2">
+<div class="capsule-btn-light !px-3 !py-1">
+<span class="status-dot dot-high"></span>
+<span>高危 1</span>
+</div>
+<div class="capsule-btn-light !px-3 !py-1">
+<span class="status-dot dot-concern"></span>
+<span>关注 2</span>
+</div>
+<div class="capsule-btn-light !px-3 !py-1">
+<span class="status-dot dot-suggest"></span>
+<span>建议 4</span>
+</div>
+<div class="capsule-btn-light !px-3 !py-1">
+<span class="status-dot dot-info"></span>
+<span>说明 12</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Results List -->
+<section class="flex flex-col gap-3">
+<h3 class="text-[14px] font-medium text-[#1a1c1c] px-1 mb-2">检测明细</h3>
+<!-- Card 1 (High Risk) -->
+<div class="glass-card-light relative overflow-hidden flex flex-col p-4 gap-3">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-[#c61818]"></div>
+<div class="pl-3 flex flex-col gap-2">
+<div class="flex items-start justify-between gap-4">
+<div class="flex items-center gap-2">
+<span class="status-dot dot-high"></span>
+<h4 class="text-[15px] font-medium text-[#1a1c1c]">权限过度暴露：/etc/hosts</h4>
+</div>
+<button class="capsule-btn-primary shrink-0">生成修复脚本</button>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="code-path-light">/etc/hosts</span>
+<button class="text-[#636565] hover:text-[#1a1c1c] transition-colors" data-icon="content_copy" title="Copy Path">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+</button>
+</div>
+<p class="text-body-light text-[#454747] mt-1">检测到该文件具备全局写权限，可能导致 DNS 投毒风险，建议立即收缩权限至 644。</p>
+</div>
+</div>
+<!-- Card 2 (Concern) -->
+<div class="glass-card-light p-4 flex items-center justify-between gap-4 group">
+<div class="flex items-center gap-3">
+<span class="status-dot dot-concern"></span>
+<h4 class="text-[14px] font-medium text-[#1a1c1c]">未签名的内核扩展</h4>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-[#636565] hover:text-[#1a1c1c]" data-icon="chevron_right">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+<!-- Card 3 (Passed) -->
+<div class="glass-card-light p-4 flex items-center justify-between gap-4 group opacity-70">
+<div class="flex items-center gap-3">
+<span class="status-dot dot-passed"></span>
+<h4 class="text-[14px] font-medium text-[#636565]">系统补丁状态</h4>
+</div>
+<span class="text-meta-light text-[#10b981]">已是最新</span>
+</div>
+<!-- Fake extra cards to show scrolling -->
+<div class="glass-card-light p-4 flex items-center justify-between gap-4 opacity-70">
+<div class="flex items-center gap-3">
+<span class="status-dot dot-passed"></span>
+<h4 class="text-[14px] font-medium text-[#636565]">防火墙规则集检查</h4>
+</div>
+<span class="text-meta-light text-[#10b981]">正常</span>
+</div>
+<div class="glass-card-light p-4 flex items-center justify-between gap-4 opacity-70">
+<div class="flex items-center gap-3">
+<span class="status-dot dot-passed"></span>
+<h4 class="text-[14px] font-medium text-[#636565]">默认密码合规性</h4>
+</div>
+<span class="text-meta-light text-[#10b981]">已通过</span>
+</div>
+</section>
+</main>
+<!-- Footer Area -->
+<footer class="border-t border-black/5 bg-white/40 backdrop-blur-md px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+<div class="text-meta-light text-[#636565]">
+                生成时间：2024-05-20 14:30 · 版本 v2.1.0 · 免责声明：本报告仅供参考
+            </div>
+<div class="flex items-center gap-2">
+<button class="capsule-btn-light">检查更新</button>
+<button class="capsule-btn-light">复制 Markdown</button>
+<button class="capsule-btn-light">导出 JSON</button>
+</div>
+</footer>
+</div>
+</body></html>

@@ -1,5 +1,5 @@
 /**
- * dsh-security-doctor — client-half structural test (v0.3).
+ * dsh-security-doctor — client-half structural test (v0.4).
  *
  * Loads lib/client.js through a fake `window.__ModuleLoader__`, calls the
  * captured factory with a stubbed `require('react')` (a tiny hooks-capable
@@ -10,7 +10,8 @@
  * v0.3 additions: report footer shows the producing plugin version (V3), the
  * manual check-update button fires exactly ONE api.github.com request per
  * click and none before it (V4), and the fetched tag is echoed to self-test
- * (V8). Run with:
+ * (V8). v0.4 additions: liquid-glass overview — score gauge (100−25·high
+ * −10·medium…), status dots, dot+count capsules. Run with:
  *
  *   node test/client.mjs
  */
@@ -23,7 +24,7 @@ const sampleReport = {
   generatedAt: new Date('2026-08-16T12:00:00Z').toISOString(),
   home: 'C:\\Users\\t\\.dsh',
   workspace: 'D:\\proj',
-  pluginVersion: '0.3.0',
+  pluginVersion: '0.4.0',
   verdict: '测试判词',
   summary: { high: 1, medium: 1, low: 0, info: 0, error: 0 },
   checks: [
@@ -45,7 +46,7 @@ globalThis.window = {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(ghLatest) })
     }
     if (u.includes('/self-test')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.3.0' }) })
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.4.0' }) })
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: sampleReport }) })
   },
@@ -214,7 +215,14 @@ async function main() {
   // V3: the report footer states the plugin version that produced it
   await settle()
   const upd0 = renderAndCollect(slot)
-  assert.ok(upd0.text.includes('插件 v0.3.0'), 'report footer shows plugin version')
+  assert.ok(upd0.text.includes('插件 v0.4.0'), 'report footer shows plugin version')
+  // v0.4 liquid-glass overview: score gauge (100−25·1−10·1 = 65), dots, capsules
+  assert.ok(upd0.nodes.some((n) => n.props.className === 'dsd-gauge'), 'score gauge svg rendered')
+  assert.ok(upd0.text.includes('安全评分'), 'gauge label shown')
+  assert.ok(upd0.text.includes('65'), 'score computed from summary (65)')
+  assert.ok(upd0.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-dot--high')), 'high status dot rendered')
+  assert.ok(upd0.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-pill')), 'count capsules rendered')
+  assert.ok(upd0.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-check--pass')), 'passed cards carry the pass modifier')
   const updBtn = upd0.nodes.filter((n) => n.type === 'button').find((b) => b.children.join('').includes('检查更新'))
   assert.ok(updBtn, 'check-update button rendered')
   updBtn.props.onClick()

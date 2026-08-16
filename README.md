@@ -6,8 +6,9 @@
 
 > 生态现状：`awesome-dsh-plugin` 官方清单自己写着"装插件等于以你自己的权限运行第三方代码，本清单不是安全审查"。这个插件把"我现在的环境安全吗？"变成一次点击。
 
-## 功能（v0.3）
+## 功能（v0.4）
 
+- **液态玻璃界面（v0.4）**：报告弹窗以「Liquid Glass」质感重设计——磨砂半透明面板、环形安全评分（0–100，颜色随最重级别变化）、状态圆点 + 胶囊计数、玻璃卡片（高危为左侧色条强调）、内联 SVG 细线图标；明暗主题自适应（优先跟随宿主主题 token）。设计规范存档见 [`界面/`](界面/DESIGN.md)。
 - **自动体检 + 高危徽标**：安装后挂载即自动体检一次；存在高危项时按钮角标显示红色计数，点开报告后清除。
 - **七项只读检查**（见下表），报告按 高危 → 关注 → 建议 → 说明 排序，高危卡片置顶强调。
 - **版本自检 + 手动检查更新（v0.3）**：报告页脚显示「插件 vX.Y.Z」（导出/复制的报告同样标注生成版本）；「检查更新」按钮**仅在你点击时**向 `api.github.com` 查询最新 Release——这是本插件唯一的显式外发（单次请求、只读版本信息、默认零请求），有新版会提示并指向下面「更新」一节。
@@ -39,10 +40,10 @@
 ### 常规安装（已安装 dsh）
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0
 ```
 
-（`#v0.3.0` 锁定版本标签，安装的就是 Release 页对应的那个 commit，可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`。）
+（`#v0.4.0` 锁定版本标签，安装的就是 Release 页对应的那个 commit，可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`。）
 
 ### 源码 checkout 运行的 DSH（无全局 `dsh` 命令）
 
@@ -50,19 +51,19 @@ dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
 
 ```bash
 # pnpm 可用时
-pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
+pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0
 
 # 或直接走 CLI 入口
-node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
+node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0
 ```
 
 ### 安装自检（装没装上，一条命令确认）
 
 ```bash
-curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin":"dsh-security-doctor","version":"0.3.0","reportVersion":"0.3.0",...}
+curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test   # {"ok":true,"plugin":"dsh-security-doctor","version":"0.4.0","reportVersion":"0.4.0",...}
 ```
 
-三查：① 上面 self-test 返回 `ok:true`；② 浏览器控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.3.0`；③ 侧栏底部出现「安全体检」按钮。
+三查：① 上面 self-test 返回 `ok:true`；② 浏览器控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.4.0`；③ 侧栏底部出现「安全体检」按钮。
 
 <details>
 <summary>手动安装（编辑 profile 文件）</summary>
@@ -71,7 +72,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 // ~/.dsh/profiles/web/package.json
 {
   "dependencies": {
-    "dsh-security-doctor": "github:ChenChen913/dsh-security-doctor#v0.3.0"
+    "dsh-security-doctor": "github:ChenChen913/dsh-security-doctor#v0.4.0"
   }
 }
 ```
@@ -93,8 +94,8 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 
 1. **换版本重装**（任选其一）：
    ```bash
-   dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.3.0
-   # 或手动：编辑 ~/.dsh/profiles/web/package.json，把依赖改为 "...#v0.3.0"，
+   dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.4.0
+   # 或手动：编辑 ~/.dsh/profiles/web/package.json，把依赖改为 "...#v0.4.0"，
    # 然后在 profile 目录执行 pnpm install
    ```
 2. **重启 `dsh web`**。原因：宿主插件代码驻留在运行中的进程内存里，不会热加载；客户端对插件元数据也有缓存，同样要重启才刷新。**不重启 = 还在跑旧版**。
@@ -103,9 +104,9 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 更新后自检（10 秒确认跑的确实是新版）：报告页脚的「插件 vX.Y.Z」、上面 curl self-test 的 `version` 字段、控制台的 `host self-test: vX.Y.Z`，三处任看一处。
 
 - **更新前先看改了什么**：[CHANGELOG.md](CHANGELOG.md)（逐版变更 + 实测 harness 矩阵）；每个 [GitHub Release](https://github.com/ChenChen913/dsh-security-doctor/releases) 附与上一版的 diff 链接与 tag commit SHA。
-- **存量迁移（0.1.x 装的未锁版本）**：早期 README 的安装命令不带 `#tag`，装上的是追 main 的滚动引用——开发者推一次 main、你重装一次，装的到底是什么无从对账。请按上面第 1 步把依赖改为带 `#v0.3.0` 的锁定引用，从此每次更新都走「改 tag → 重装 → 重启」。
+- **存量迁移（0.1.x 装的未锁版本）**：早期 README 的安装命令不带 `#tag`，装上的是追 main 的滚动引用——开发者推一次 main、你重装一次，装的到底是什么无从对账。请按上面第 1 步把依赖改为带 `#v0.4.0` 的锁定引用，从此每次更新都走「改 tag → 重装 → 重启」。
 - **回退上一版**：把依赖里的 tag 改回旧版本（如 `#v0.2.1`）→ `pnpm install` → 重启。已发布的版本与各自的 SHA 见 Releases 页。
-- **更严格的锁定**：`#v0.3.0` 锁的是 tag（可读性好，指向 Release 对应 commit）；要绝对不可变，可锁 commit SHA：`github:ChenChen913/dsh-security-doctor#<Release 页标注的 tag SHA>`。
+- **更严格的锁定**：`#v0.4.0` 锁的是 tag（可读性好，指向 Release 对应 commit）；要绝对不可变，可锁 commit SHA：`github:ChenChen913/dsh-security-doctor#<Release 页标注的 tag SHA>`。
 
 ## 工作原理
 
@@ -146,7 +147,7 @@ grep -rn "eval(\|new Function\|child_process" lib/   # 只有 icacls 一处 exec
 ## 常见问题
 
 - **安装时报 `missing peer @deepseek-ai/cordis` 警告？** v0.1 曾声明该 peer；v0.2.0 起已移除——插件运行时只用 Node 内置模块，宿主由 dsh 提供，该警告无害且不再出现。
-- **体检把 dsh-security-doctor 自己列为"未锁定"？** 0.1.x 的 github: 安装确实未锁版本；0.2.0 起报告会标注"本插件自身"并给出锁定命令，README 安装命令也已默认带 `#v0.3.0`。旧安装的迁移步骤见上面「更新」一节。
+- **体检把 dsh-security-doctor 自己列为"未锁定"？** 0.1.x 的 github: 安装确实未锁版本；0.2.0 起报告会标注"本插件自身"并给出锁定命令，README 安装命令也已默认带 `#v0.4.0`。旧安装的迁移步骤见上面「更新」一节。
 - **怎么知道我现在跑的是哪个版本、有没有新版？** 报告页脚显示「插件 vX.Y.Z」；点「检查更新」按钮查最新 Release（唯一一次显式外发）；或 curl self-test 看 `version` 字段。更新/回退步骤见「更新」一节。
 - **Windows 凭据检查说"无法判断"？** 0.1.x 的旧文案；0.2.0 起会用 icacls 读 ACL 列出实际可访问账户（查询失败时才回退提示）。
 - **curl 访问 `/check`/`/self-test` 返回 403？** v0.2.1 起两路由要求配对头 `x-dsh-security-doctor: 1`（防本机其他网页跨站读取你的报告），curl 加 `-H 'x-dsh-security-doctor: 1'` 即可，插件自身界面不受影响。
@@ -176,7 +177,8 @@ grep -rn "eval(\|new Function\|child_process" lib/   # 只有 icacls 一处 exec
 
 | 插件版本 | 实测 harness | OS | 备注 |
 | --- | --- | --- | --- |
-| v0.3.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
+| v0.4.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
+| v0.3.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.2.1 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.2.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.1.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
