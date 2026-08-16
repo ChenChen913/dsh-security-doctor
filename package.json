@@ -1,6 +1,6 @@
 {
   "name": "dsh-security-doctor",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "One-click local security checkup for the DeepSeek Harness Web UI: a sidebar button that runs read-only checks (!!js config, third-party plugins, credential file permissions, instruction files, endpoint config, protection services) and shows a severity-graded report. / DSH 安全医生：一键本机安全体检插件，只读检查、分级报告、不外发数据。",
   "private": false,
   "type": "module",

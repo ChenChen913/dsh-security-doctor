@@ -1,13 +1,16 @@
 /**
- * dsh-security-doctor — client-half structural test (v0.2).
+ * dsh-security-doctor — client-half structural test (v0.3).
  *
  * Loads lib/client.js through a fake `window.__ModuleLoader__`, calls the
  * captured factory with a stubbed `require('react')` (a tiny hooks-capable
  * fake), applies the plugin to a fake slots context, renders the footer
- * component, and asserts the v0.2 UI contract: button a11y labels, mount-time
+ * component, and asserts the UI contract: button a11y labels, mount-time
  * auto checkup (fake fetch), open modal with dialog semantics, severity-sorted
  * cards with the high card first, and prescription/copy/export controls.
- * Run with:
+ * v0.3 additions: report footer shows the producing plugin version (V3), the
+ * manual check-update button fires exactly ONE api.github.com request per
+ * click and none before it (V4), and the fetched tag is echoed to self-test
+ * (V8). Run with:
  *
  *   node test/client.mjs
  */
@@ -20,6 +23,7 @@ const sampleReport = {
   generatedAt: new Date('2026-08-16T12:00:00Z').toISOString(),
   home: 'C:\\Users\\t\\.dsh',
   workspace: 'D:\\proj',
+  pluginVersion: '0.3.0',
   verdict: '测试判词',
   summary: { high: 1, medium: 1, low: 0, info: 0, error: 0 },
   checks: [
@@ -31,14 +35,19 @@ const sampleReport = {
 
 let capturedModule = null
 let fetchCalls = []
+let ghLatest = { tag_name: 'v9.9.9' } // what the fake GitHub release API returns
 globalThis.window = {
   __ModuleLoader__: { load(m) { capturedModule = m } },
   fetch(url, init) {
     fetchCalls.push({ url: String(url), init })
-    if (String(url).includes('/self-test')) {
-      return Promise.resolve({ json: () => Promise.resolve({ ok: true, version: '0.2.1' }) })
+    const u = String(url)
+    if (u.includes('api.github.com')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(ghLatest) })
     }
-    return Promise.resolve({ json: () => Promise.resolve({ ok: true, report: sampleReport }) })
+    if (u.includes('/self-test')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.3.0' }) })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: sampleReport }) })
   },
   localStorage: {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -101,6 +110,21 @@ function findAll(el, predicate) {
   const out = []
   walk(el, (node) => { if (predicate(node)) out.push(node) })
   return out
+}
+/**
+ * Render once and collect nodes/text in a SINGLE walk. The fake hooks array is
+ * global, so every extra walk re-invokes function components on fresh hook
+ * slots — for click-then-read state tests the write and the read must land on
+ * the same slots, which only holds when each render phase walks exactly once.
+ */
+function renderAndCollect(slot) {
+  resetHooks()
+  const el = slot.render({ wide: true })
+  const nodes = []
+  walk(el, (node) => nodes.push(node))
+  const text = []
+  for (const node of nodes) for (const c of (node.children ?? [])) if (typeof c === 'string') text.push(c)
+  return { el, nodes, text: text.join(' ') }
 }
 
 async function main() {
@@ -179,6 +203,40 @@ async function main() {
   assert.equal(history.length, 1)
   assert.deepEqual(history[0].summary, sampleReport.summary)
   assert.ok(history[0].findingIds.includes('js-directives'))
+
+  // ── v0.3 versioning contract ──
+  // The fake useEffect runs on every component invocation, so each render
+  // re-triggers run() and flips phase to 'running' until its fetch settles —
+  // drain that with a tick before every collect render below.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 10))
+  // V4 precondition: zero egress so far — no GitHub request before any click
+  assert.ok(!fetchCalls.some((c) => String(c.url).includes('api.github.com')), 'no GitHub request before a click')
+  // V3: the report footer states the plugin version that produced it
+  await settle()
+  const upd0 = renderAndCollect(slot)
+  assert.ok(upd0.text.includes('插件 v0.3.0'), 'report footer shows plugin version')
+  const updBtn = upd0.nodes.filter((n) => n.type === 'button').find((b) => b.children.join('').includes('检查更新'))
+  assert.ok(updBtn, 'check-update button rendered')
+  updBtn.props.onClick()
+  await settle()
+  const ghCalls = fetchCalls.filter((c) => String(c.url).includes('api.github.com'))
+  assert.equal(ghCalls.length, 1, 'exactly one GitHub request per click')
+  assert.equal(ghCalls[0].url, 'https://api.github.com/repos/ChenChen913/dsh-security-doctor/releases/latest', 'hits the pinned release URL')
+  // V8: the fetched tag is handed to the host self-test (localhost echo)
+  assert.ok(fetchCalls.some((c) => String(c.url).includes('/dsh-security-doctor/self-test?latest=v9.9.9')), 'fetched tag echoed to self-test')
+  const upd1 = renderAndCollect(slot)
+  assert.ok(upd1.text.includes('有新版') && upd1.text.includes('v9.9.9'), 'newer release surfaced with tag')
+  assert.ok(upd1.text.includes('README'), 'points at the README update section')
+
+  // up-to-date path: same-version tag → “已是最新版本”
+  ghLatest = { tag_name: 'v0.3.0' }
+  await settle()
+  const upd2 = renderAndCollect(slot)
+  const updBtn2 = upd2.nodes.filter((n) => n.type === 'button').find((b) => b.children.join('').includes('检查更新'))
+  updBtn2.props.onClick()
+  await settle()
+  const upd3 = renderAndCollect(slot)
+  assert.ok(upd3.text.includes('已是最新版本'), 'up-to-date message shown')
 
   // badge on the idle button after a high finding (modal closed via click)
   resetHooks()

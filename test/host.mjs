@@ -1,12 +1,14 @@
 /**
- * dsh-security-doctor — host-half integration test (v0.2).
+ * dsh-security-doctor — host-half integration test (v0.3).
  *
  * Loads lib/index.js with a fake `ctx` whose services are reachable ONLY via
  * `ctx.get()` (not property access — the v0.2 F2 fix), drives the registered
  * routes with mock req/res, and asserts: two exact routes registered, 405 on
  * POST, full JSON report on GET with real policy values read from the fake
  * service configs, approval=never upgrading severity, and a self-test route
- * reporting host load + version. Run with:
+ * reporting host load + version. v0.3: the report carries pluginVersion (V3)
+ * matching the self-test version, which also exposes reportVersion and a
+ * validated ?latest= tag echo (V8). Run with:
  *
  *   node test/host.mjs
  */
@@ -88,6 +90,20 @@ async function main() {
   assert.equal(self.services.approvalPolicy, 'ask')
   assert.equal(self.services.defaultPreset, 'workspace-write')
 
+  // v0.3 V8: self-test also carries the version /check reports, and echoes a
+  // validated ?latest= tag (invalid or missing → null; never a write/fetch)
+  assert.equal(self.reportVersion, self.version, 'reportVersion matches version')
+  assert.equal(self.latestTagHint, null, 'no latest hint by default')
+  const resHint = mockRes()
+  await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/self-test?latest=v9.8.7' }, resHint)
+  assert.equal(JSON.parse(resHint.body).latestTagHint, 'v9.8.7', 'valid ?latest is echoed')
+  const resHintBad = mockRes()
+  await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/self-test?latest=javascript:alert(1)' }, resHintBad)
+  assert.equal(JSON.parse(resHintBad.body).latestTagHint, null, 'non-semver ?latest rejected')
+  const resHintBare = mockRes()
+  await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/self-test?latest=9.8.7' }, resHintBare)
+  assert.equal(JSON.parse(resHintBare.body).latestTagHint, '9.8.7', 'bare semver accepted')
+
   // check route with ask + workspace-write → services check passes, values shown
   const res1 = mockRes()
   await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: H }, res1)
@@ -96,6 +112,10 @@ async function main() {
   const payload1 = JSON.parse(res1.body)
   assert.equal(payload1.ok, true)
   assert.equal(payload1.report.checks.length, 7)
+  // v0.3 V3: the report states which plugin version produced it (client footer
+  // + export/copy rely on it) and matches the self-test version
+  assert.match(payload1.report.pluginVersion, /^\d+\.\d+\.\d+$/, 'report carries pluginVersion')
+  assert.equal(payload1.report.pluginVersion, self.version, 'report version matches self-test version')
   const services1 = payload1.report.checks.filter((c) => c.id === 'security-services')[0]
   assert.equal(services1.status, 'pass')
   assert.match(services1.detail, /ask/)
