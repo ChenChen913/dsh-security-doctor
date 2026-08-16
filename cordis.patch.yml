@@ -1,0 +1,7 @@
+# dsh-security-doctor — bundle patch: one plugin row loading both halves.
+# host half registers the GET /dsh-security-doctor/check route (read-only
+# checkup); client half registers the sidebar footer "安全体检" button and
+# renders the report modal.
+- insert:
+    - id: dsh-security-doctor
+      name: dsh-security-doctor
