@@ -59,6 +59,14 @@ globalThis.document = {
   head: { appendChild() {} },
 }
 
+// Node 21+ ships a built-in global navigator whose language follows the OS
+// locale — pin it so the i18n branch under test is deterministic (CI runners
+// are en-US; a Chinese dev machine is zh-CN; both must pass the same suite)
+function setNavigator(language) {
+  Object.defineProperty(globalThis, 'navigator', { value: { language }, configurable: true })
+}
+setNavigator('zh-CN')
+
 // ── fake React: element descriptors + minimal hook state ──
 let hookStates = []
 let hookIndex = 0
@@ -184,6 +192,28 @@ async function main() {
   assert.equal(badge[0].children[0], '1')
 
   console.log('CLIENT OK — slot:', slot.spec.id, '| cards:', titles.join(' / '))
+
+  // ── en-US locale: the same factory re-run picks the English string table ──
+  setNavigator('en-US')
+  hookStates = []
+  resetHooks()
+  const modEn = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotEn = null
+  modEn.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotEn = { spec, render }; return () => { slotEn = null } },
+    },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  resetHooks()
+  const buttonEn = slotEn.render({ wide: true })
+  assert.equal(buttonEn.props['aria-label'], 'Security checkup')
+  console.log('CLIENT OK (en-US) — aria-label:', buttonEn.props['aria-label'])
 }
 
 main().then(
