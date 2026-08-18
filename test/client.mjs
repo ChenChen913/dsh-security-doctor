@@ -18,7 +18,12 @@
  * formula rides the gauge tooltip and info findings cap the score at 99
  * (v0.5-5), the trend line names same-id findings whose content changed
  * (v0.5-6), findings can be acknowledged and stop driving the badge (v0.5-7),
- * and CJK-glued slash tokens never become path chips (v0.5-10). Run with:
+ * and CJK-glued slash tokens never become path chips (v0.5-10). v0.6
+ * additions: passed checks collapse into ONE grouped list of rows (dot +
+ * title + 正常 + chevron; click expands detail+advice in place), "- "
+ * inventory lines render as metadata rows, the trend renders as separate
+ * nowrap stat spans, and the footer splits into a metadata line plus a
+ * safety-note line. Run with:
  *
  *   node test/client.mjs
  */
@@ -200,11 +205,13 @@ async function main() {
   assert.equal(dialogs[0].props['aria-modal'], 'true')
 
   // severity sort: the high card must precede the medium card; pass card last
+  // (v0.6: pass checks render as rows inside ONE dsd-passgroup list)
   const cards = findAll(open, (n) => typeof n.props.className === 'string' && /(^|\s)dsd-check(\s|$)/.test(n.props.className))
   assert.equal(cards.length, 3, 'three check cards')
+  assert.ok(open.children, 'modal rendered')
+  assert.ok(findAll(open, (n) => n.props.className === 'dsd-passgroup').length === 1, 'passed checks share ONE grouped list (v0.6)')
   const titles = cards.map((c) => {
-    const head = c.children.filter((ch) => typeof ch === 'object' && ch.props.className === 'dsd-check__head')[0]
-    const title = head.children.filter((ch) => typeof ch === 'object' && ch.props.className === 'dsd-check__title')[0]
+    const title = findAll(c, (n) => n.props.className === 'dsd-check__title')[0]
     return title && title.children[0]
   })
   assert.equal(titles[0], 'JS 检查', 'high card first')
@@ -325,6 +332,58 @@ async function main() {
   const idleAcked = renderAndCollect(slot)
   assert.equal(idleAcked.nodes.filter((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-badge')).length, 0,
     'acknowledged high finding no longer drives the badge (v0.5-7)')
+
+  // ── v0.6 layout contract ──
+  // precondition: a prior history entry with a DIFFERENT generatedAt, so
+  // diffLastRun finds a baseline and the trend stats render as their four
+  // span units (the v0.5-2 block below resets history and re-tests dedup)
+  store.set('dsd.history', JSON.stringify([{
+    generatedAt: new Date(Date.now() - 60 * 1000).toISOString(),
+    summary: sampleReport.summary,
+    findingIds: ['third-party-plugins', 'js-directives'],
+    fingerprints: null,
+  }]))
+  // "- " inventory lines (the 盘点 fixture's '- dsh-x') render as muted
+  // metadata rows with the raw line as their tooltip — not body prose
+  hookStates[0] = 'open'
+  const layoutView = renderAndCollect(slot)
+  const metaRows = layoutView.nodes.filter((n) => n.props.className === 'dsd-check__meta-row')
+  assert.equal(metaRows.length, 1, 'inventory lines become metadata rows (v0.6)')
+  assert.equal(metaRows[0].props.title, 'dsh-x', 'metadata row keeps the full text as its tooltip')
+  assert.ok(!layoutView.text.split(' ').includes('- dsh-x'), 'the "- " bullet is stripped from the visible text')
+  assert.ok(/来源\s*·\s*dsh-x/.test(layoutView.text), 'source rows carry the 来源 prefix (v0.6)')
+  // finding cards share the three-column skeleton: dot | main | side
+  assert.ok(layoutView.nodes.some((n) => n.props.className === 'dsd-check__main'), 'finding card main column rendered')
+  assert.ok(layoutView.nodes.some((n) => n.props.className === 'dsd-check__side'), 'finding card action column rendered')
+  // trend renders as separate nowrap stat spans (wraps as units, never overlaps)
+  const trendDiv = layoutView.nodes.filter((n) => n.props.className === 'dsd-trend')[0]
+  assert.ok(trendDiv && trendDiv.children.length >= 4 && trendDiv.children.every((c) => c.type === 'span'),
+    'trend stats are individual span units (v0.6)')
+  // footer reads in two layers: metadata line + safety-note paragraph
+  const metaLine = layoutView.nodes.filter((n) => n.props.className === 'dsd-footer__meta')[0]
+  const noteLine = layoutView.nodes.filter((n) => n.props.className === 'dsd-footer__note')[0]
+  assert.ok(metaLine && String(metaLine.children[0]).includes('尽力检测（best-effort）'),
+    'footer layer 1 carries the generation metadata (v0.6)')
+  assert.ok(noteLine && String(noteLine.children[0]).includes('不等于绝对安全'),
+    'footer layer 2 carries the safety note as its own paragraph (v0.6)')
+  // pass rows: dot + title + 正常 + chevron, collapsed by default
+  const passRow = layoutView.nodes.filter((n) => n.props.className === 'dsd-check__row')[0]
+  assert.ok(passRow, 'pass check renders as a collapsible row (v0.6)')
+  assert.equal(passRow.props['aria-expanded'], false, 'pass row starts collapsed')
+  assert.ok(layoutView.text.includes('正常'), 'pass row shows the quiet ok status')
+  assert.ok(layoutView.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-check__chev')),
+    'pass row carries the chevron hint')
+  assert.ok(!layoutView.nodes.some((n) => n.props.className === 'dsd-check__more'),
+    'collapsed pass row hides its detail body')
+  // clicking the row expands detail + advice in place
+  passRow.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const passOpen = renderAndCollect(slot)
+  assert.ok(passOpen.text.includes('建议：ok'), 'expanded pass row reveals its advice (v0.6)')
+  assert.ok(passOpen.nodes.some((n) => n.props.className === 'dsd-check__more'), 'pass row expands in place')
+  const passRowOpen = passOpen.nodes.filter((n) => n.props.className === 'dsd-check__row')[0]
+  assert.equal(passRowOpen.props['aria-expanded'], true, 'aria-expanded flips with the row state')
 
   console.log('CLIENT OK — slot:', slot.spec.id, '| cards:', titles.join(' / '))
 
