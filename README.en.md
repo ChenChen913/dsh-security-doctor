@@ -25,12 +25,12 @@ The report footer states the producing version; a manual "Check update" button q
 > ⚠️ **Read first**: (1) a running `dsh web` does NOT hot-load new plugin layers — **restart `dsh web` after installing** or the button won't appear; (2) restarting briefly interrupts conversations — wind down first.
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0
 ```
 
-The `#v0.5.0` tag pins the exact released commit (reproducible, rollback-able; once published to npm: `dsh plugin --profile web add dsh-security-doctor`). Running DSH from a source checkout? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0`, or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0`.
+The `#v0.6.0` tag pins the exact released commit (reproducible, rollback-able; once published to npm: `dsh plugin --profile web add dsh-security-doctor`). Running DSH from a source checkout? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`, or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`.
 
-Install self-verification (curl returns `ok:true` + console logs `[dsh-security-doctor] client loaded; host self-test: v0.5.0` + the button appears):
+Install self-verification (curl returns `ok:true` + console logs `[dsh-security-doctor] client loaded; host self-test: v0.6.0` + the button appears):
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
@@ -60,13 +60,14 @@ It audits itself first with its own published standard: [self-audit report](docs
 
 Best-effort: "no findings" is not "safe". The egress scan is a first filter (obfuscated/runtime-assembled URLs invisible); POSIX mode bits are not the full ACL story; report bodies are currently Chinese; per-session policy overrides are not read; deep code review of external plugins stays with the [security-review guide](docs/guide-security-review.md).
 
-Docs index: [CHANGELOG](CHANGELOG.md) (per-version changes + tested matrices) · [release checklist](docs/release.md) · [v0.5 fix plan](docs/FIX-PLAN-v0.5.md) · [security-review](docs/guide-security-review.md) / [secure-development](docs/guide-secure-development.md) guides (installable `skills/` versions included).
+Docs index: [CHANGELOG](CHANGELOG.md) (per-version changes + tested matrices) · [release checklist](docs/release.md) · [v0.5 fix plan](FIX-PLAN-v0.5.md) · [security-review](docs/guide-security-review.md) / [secure-development](docs/guide-secure-development.md) guides (installable `skills/` versions included).
 
 ## Compatibility
 
 | Plugin | Tested harness | OS | Notes |
 | --- | --- | --- | --- |
-| v0.5.0 | DSH 0.1.0-rc.5 | Windows (source run) | macOS/Linux via CI matrix; Node ≥ 22 |
+| v0.6.0 | DSH 0.1.0-rc.5 | Windows (source run) | macOS/Linux via CI matrix; Node ≥ 22 |
+| v0.5.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 | v0.2.0 – v0.4.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 | v0.1.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 

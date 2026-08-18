@@ -4,9 +4,45 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [0.6.0] — 2026-08-19
+
+两轮修改合并发版：用户实测反馈的 10 项修复（原计划 v0.5.1）+ 报告页布局精修。视觉方向（液态玻璃 / 半透明 / 黑白灰）与检测逻辑、评分公式、数据结构、外发口径均不变。
+
+### 修复（引擎，用户反馈 10 项）
+
+- **端点扫描别名键扩展**：出网端点检查补充 `apiUrl` / `apiEndpoint` / `endpoint` 别名键与更多 LLM 环境覆盖（`OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` 等）。
+- **双语报告**：全部检查的标题 / 详情 / 建议与判词按客户端 locale 中英文渲染（`?lang=`，默认中文）。
+- **安全服务建议修正**：建议指向真实的 Web UI 权限预设 / `DSH_PERMISSION_MODE`，移除虚构的 settings 路径。
+
+### 修复（客户端）
+
+- 单项处方复制增加 toast 反馈（此前静默复制）。
+- 10 分钟内相同的自动体检在历史中去重（手动检测始终记录），趋势基线不被页面刷新淹没。
+- 评分公式挂在评分环 tooltip 上；存在说明级发现时评分上限 99。
+- 趋势行按检查项内容指纹追踪「内容有变」；新增「已阅」机制——确认后的发现不再驱动红色徽标与自动弹窗，直至内容变化。
+- 路径识别正则 CJK 安全化：中文正文里的多段 ASCII 路径不再误判为可复制路径块。
+- 打包：`FIX-PLAN-v0.5.md` 移出 `docs/`，不再随插件包分发。
+
+### 变更（布局精修，视觉风格不变）
+
+- **总览仪表盘化**：评分环 | 判词 / 趋势统计 / 级别胶囊统一垂直节奏，趋势统计以整体换行的独立单元渲染，窄窗口不重叠。
+- **重点卡片统一骨架**：状态点 | 标题·正文·来源 | 级别+操作 三列结构，任何卡片多一行文字不再挤压其他卡片的对齐。
+- **来源信息降级为 metadata 行**：盘点清单行（`- …`）渲染为小号灰色单行（ellipsis + tooltip，前缀「来源 ·」），不再像正文或撑高卡片。
+- **通过项分组折叠**：通过的检查合并为一张轻量列表（绿点 + 标题 + 「正常」 + chevron），点击原位展开详情与建议。
+- **Footer 分层**：生成元数据行与安全说明拆为两段；全部胶囊按钮统一 28px 高。
+- **窄屏适配**：480px 以下收紧外边距；各区域按单元换行。
+
+### 实测环境
+
+| 项 | 值 |
+| --- | --- |
+| harness | DSH `0.1.0-rc.5`（Windows，源码运行） |
+| OS | Windows 实测；macOS / Linux 由 CI（ubuntu/macos/windows × Node 22/24）覆盖 |
+| Node | ≥ 22（22/24 CI 通过） |
+
 ## [0.5.0] — 2026-08-18
 
-针对用户实测反馈（2026-08-16 起，含 v0.4 追加与 UI 实测定位）的修复，逐项计划与验证记录见 [docs/FIX-PLAN-v0.5.md](docs/FIX-PLAN-v0.5.md)。
+针对用户实测反馈（2026-08-16 起，含 v0.4 追加与 UI 实测定位）的修复，逐项计划与验证记录见 [FIX-PLAN-v0.5.md](FIX-PLAN-v0.5.md)。
 
 ### 修复（引擎）
 
@@ -120,6 +156,7 @@
 
 实测环境：DSH `0.1.0-rc.5`（Windows 源码运行）。
 
+[0.6.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.2.1...v0.3.0

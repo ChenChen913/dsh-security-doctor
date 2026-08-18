@@ -25,12 +25,12 @@
 > ⚠️ **两个必读**：① 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载新插件层）；② 重启会短暂中断当前对话，先保存再重启。
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0
 ```
 
-`#v0.5.0` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.5.0`。
+`#v0.6.0` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`。
 
-装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.5.0` + 侧栏出现按钮）：
+装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.6.0` + 侧栏出现按钮）：
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
@@ -64,13 +64,14 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 
 尽力检测（best-effort），"未见异常"不等于"绝对安全"；出网扫描是初筛（混淆编码、运行时拼接的地址检测不到）；POSIX 权限位不等于完整 ACL；报告正文当前为中文；按会话/agent 覆盖的策略值不读取；深度审查用《[安全检测指南](docs/guide-security-review.md)》交给 AI 或等后续版本。
 
-文档索引：[CHANGELOG](CHANGELOG.md)（逐版变更 + 实测矩阵）· [发布清单](docs/release.md) · [v0.5 修复计划](docs/FIX-PLAN-v0.5.md) · [安全检测指南](docs/guide-security-review.md) / [安全开发指南](docs/guide-secure-development.md)（`skills/` 下有可安装的 SKILL.md 版本）。
+文档索引：[CHANGELOG](CHANGELOG.md)（逐版变更 + 实测矩阵）· [发布清单](docs/release.md) · [v0.5 修复计划](FIX-PLAN-v0.5.md) · [安全检测指南](docs/guide-security-review.md) / [安全开发指南](docs/guide-secure-development.md)（`skills/` 下有可安装的 SKILL.md 版本）。
 
 ## 兼容性
 
 | 插件版本 | 实测 harness | OS | 备注 |
 | --- | --- | --- | --- |
-| v0.5.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
+| v0.6.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
+| v0.5.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.2.0 – v0.4.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.1.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 

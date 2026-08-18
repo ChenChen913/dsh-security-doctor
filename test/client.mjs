@@ -36,7 +36,7 @@ const sampleReport = {
   generatedAt: new Date('2026-08-16T12:00:00Z').toISOString(),
   home: 'C:\\Users\\t\\.dsh',
   workspace: 'D:\\proj',
-  pluginVersion: '0.5.0',
+  pluginVersion: '0.6.0',
   verdict: '测试判词',
   summary: { high: 1, medium: 1, low: 0, info: 0, error: 0 },
   checks: [
@@ -67,7 +67,7 @@ globalThis.window = {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(ghLatest) })
     }
     if (u.includes('/self-test')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.5.0' }) })
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.6.0' }) })
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: checkPayload }) })
   },
@@ -243,7 +243,7 @@ async function main() {
   // V3: the report footer states the plugin version that produced it
   await settle()
   const upd0 = renderAndCollect(slot)
-  assert.ok(upd0.text.includes('插件 v0.5.0'), 'report footer shows plugin version')
+  assert.ok(upd0.text.includes('插件 v0.6.0'), 'report footer shows plugin version')
   // V5-1: only the real home path becomes a chip — Chinese prose with a
   // slash and the github dep spec must stay plain text
   const chips = upd0.nodes.filter((n) => n.props.className === 'dsd-path').map((n) => n.children.join(''))
