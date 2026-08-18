@@ -11,7 +11,14 @@
  * manual check-update button fires exactly ONE api.github.com request per
  * click and none before it (V4), and the fetched tag is echoed to self-test
  * (V8). v0.4 additions: liquid-glass overview — score gauge (100−25·high
- * −10·medium…), status dots, dot+count capsules. Run with:
+ * −10·medium…), status dots, dot+count capsules. v0.5 additions: the checkup
+ * request carries ?lang= (v0.5-4), the per-item prescription copy feeds back
+ * through the toast (v0.5-1), identical auto checkups within 10 minutes are
+ * deduped in history while manual runs always record (v0.5-2), the score
+ * formula rides the gauge tooltip and info findings cap the score at 99
+ * (v0.5-5), the trend line names same-id findings whose content changed
+ * (v0.5-6), findings can be acknowledged and stop driving the badge (v0.5-7),
+ * and CJK-glued slash tokens never become path chips (v0.5-10). Run with:
  *
  *   node test/client.mjs
  */
@@ -30,10 +37,12 @@ const sampleReport = {
   checks: [
     // V5-1 fixture: line 1 has a slash inside Chinese prose (must stay plain
     // text), line 2 a home path followed by a full-width paren (chip must cut
-    // exactly before it), line 3 a github dep spec (no chip)
+    // exactly before it), line 3 a github dep spec (no chip); line 4 is the
+    // v0.5-10 case — a multi-segment ascii path glued into CJK prose on both
+    // sides must produce NO chip (the lookbehind/lookahead guards)
     { id: 'third-party-plugins', title: '盘点', severity: 'medium', status: 'finding', detail: '- dsh-x', advice: '审' },
     { id: 'js-directives', title: 'JS 检查', severity: 'high', status: 'finding',
-      detail: '在 cordis 补丁/配置文件中发现 !!js 指令\n未发现 ~/.dsh/.credentials.yaml（Key 可能来自环境变量）\n依赖 github:ChenChen913/dsh-security-doctor#v0.4.0) 已锁定', advice: '查' },
+      detail: '在 cordis 补丁/配置文件中发现 !!js 指令\n未发现 ~/.dsh/.credentials.yaml（Key 可能来自环境变量）\n依赖 github:ChenChen913/dsh-security-doctor#v0.4.0) 已锁定\n例如路径abc/def/ghi拼接进中文时不应成为可复制路径', advice: '查' },
     { id: 'external-endpoints', title: '端点', severity: 'info', status: 'pass', detail: '无', advice: 'ok' },
   ],
 }
@@ -78,9 +87,14 @@ globalThis.document = {
 
 // Node 21+ ships a built-in global navigator whose language follows the OS
 // locale — pin it so the i18n branch under test is deterministic (CI runners
-// are en-US; a Chinese dev machine is zh-CN; both must pass the same suite)
+// are en-US; a Chinese dev machine is zh-CN; both must pass the same suite).
+// The fake clipboard resolves immediately so copy actions report success
+// (the v0.5-1 toast assertion relies on it).
 function setNavigator(language) {
-  Object.defineProperty(globalThis, 'navigator', { value: { language }, configurable: true })
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { language, clipboard: { writeText: () => Promise.resolve() } },
+    configurable: true,
+  })
 }
 setNavigator('zh-CN')
 
@@ -271,6 +285,47 @@ async function main() {
   assert.equal(badge.length, 1, 'high-count badge visible while unacknowledged')
   assert.equal(badge[0].children[0], '1')
 
+  // ── v0.5 contract additions (same module + slot as above) ──
+  // v0.5-4: every checkup request carries the client locale (?lang=zh here)
+  assert.ok(fetchCalls.some((c) => String(c.url).includes('/dsh-security-doctor/check?lang=zh')),
+    'checkup request carries ?lang=zh (v0.5-4)')
+  // v0.5-5: the score formula rides the gauge as its tooltip — the number is
+  // never a black box
+  hookStates[0] = 'open'
+  const formulaView = renderAndCollect(slot)
+  const gaugeWrap = formulaView.nodes.filter((n) => n.props.className === 'dsd-gauge-wrap')[0]
+  assert.ok(gaugeWrap && typeof gaugeWrap.props.title === 'string' && gaugeWrap.props.title.includes('评分 = 100'),
+    'score formula shown as the gauge tooltip (v0.5-5)')
+  // v0.5-1: the per-item prescription copy now feeds back through the same
+  // toast as the all-in-one copy (it used to copy silently)
+  hookStates[0] = 'open'
+  const rxView = renderAndCollect(slot)
+  const rxBtn = rxView.nodes.filter((n) => n.type === 'button').find((b) => b.children.includes('处方'))
+  assert.ok(rxBtn, 'per-item prescription button present')
+  rxBtn.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const rxDone = renderAndCollect(slot)
+  assert.ok(rxDone.text.includes('已复制到剪贴板'), 'per-item copy shows the toast (v0.5-1)')
+  // v0.5-7: acknowledging the high finding persists its detail fingerprint,
+  // dims the card, relabels the button and stops driving the badge
+  hookStates[0] = 'open'
+  const ackView = renderAndCollect(slot)
+  const ackBtns = ackView.nodes.filter((n) => n.type === 'button' && n.children.includes('已阅'))
+  assert.equal(ackBtns.length, 2, 'one ack button per finding card')
+  ackBtns[0].props.onClick() // first card in sort order = the high js-directives finding
+  const ackedStore = JSON.parse(store.get('dsd.acked'))
+  assert.ok(ackedStore && typeof ackedStore['js-directives'] === 'string', 'ack persisted with a detail fingerprint')
+  hookStates[0] = 'open'
+  const ackedView = renderAndCollect(slot)
+  assert.ok(ackedView.text.includes('已阅 ✓'), 'acked card shows the acked label')
+  assert.ok(ackedView.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-check--acked')),
+    'acked card dimmed')
+  hookStates[0] = 'idle'
+  const idleAcked = renderAndCollect(slot)
+  assert.equal(idleAcked.nodes.filter((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-badge')).length, 0,
+    'acknowledged high finding no longer drives the badge (v0.5-7)')
+
   console.log('CLIENT OK — slot:', slot.spec.id, '| cards:', titles.join(' / '))
 
   // ── en-US locale: the same factory re-run picks the English string table ──
@@ -293,6 +348,9 @@ async function main() {
   resetHooks()
   const buttonEn = slotEn.render({ wide: true })
   assert.equal(buttonEn.props['aria-label'], 'Security checkup')
+  // v0.5-4: the en client asks the host for the English report body
+  assert.ok(fetchCalls.some((c) => String(c.url).includes('/dsh-security-doctor/check?lang=en')),
+    'en client requests the English report body (v0.5-4)')
   console.log('CLIENT OK (en-US) — aria-label:', buttonEn.props['aria-label'])
 
   // ── 3.2-5: mount-time auto checkup must NOT auto-open without a high ──
@@ -325,13 +383,109 @@ async function main() {
   const manualOpen = renderAndCollect(slot3)
   assert.equal(manualOpen.nodes.filter((n) => n.props.role === 'dialog').length, 1, 'manual click opens the report')
   // 3.2-4: GitHub 404 → dedicated "no release" wording, not network failure
+  // (the js-directives ack from the v0.5-7 block persists in localStorage, so
+  // the re-triggered background runs now settle on phase 'idle' — pin the
+  // modal open to inspect the update note)
   const updBtn3 = manualOpen.nodes.filter((n) => n.type === 'button').find((b) => b.children.join('').includes('检查更新'))
   updBtn3.props.onClick()
   await new Promise((resolve) => setTimeout(resolve, 10))
+  hookStates[0] = 'open'
   const after404 = renderAndCollect(slot3)
   assert.ok(after404.text.includes('未查询到已发布的 Release'), '404 surfaces the no-release message (3.2-4)')
   assert.ok(!after404.text.includes('不可达'), '404 is not reported as network failure')
   console.log('CLIENT OK (3.2-4/3.2-5) — no auto-open without high; 404 wording distinct')
+
+  // ── v0.5-2: identical auto checkups dedup history; manual runs record ──
+  store.delete('dsd.history')
+  const stamp1 = new Date().toISOString()
+  checkPayload = { ...sampleReport, generatedAt: stamp1 }
+  hookStates = []
+  resetHooks()
+  const modD = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotD = null
+  modD.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotD = { spec, render }; return () => { slotD = null } },
+    },
+  })
+  renderAndCollect(slotD) // mount render fires the auto checkup → records
+  await settle()
+  assert.equal(JSON.parse(store.get('dsd.history')).length, 1, 'first auto checkup records history')
+  hookStates[0] = 'idle'
+  renderAndCollect(slotD) // identical auto checkup within 10 minutes → dedup
+  await settle()
+  assert.equal(JSON.parse(store.get('dsd.history')).length, 1,
+    'identical auto checkup within 10 minutes adds no history entry (v0.5-2)')
+  hookStates[0] = 'idle'
+  const manualD = renderAndCollect(slotD)
+  manualD.el.props.onClick() // manual run — the user asked for it
+  await settle()
+  assert.equal(JSON.parse(store.get('dsd.history')).length, 2,
+    'manual run always records (v0.5-2)')
+
+  // ── v0.5-6: the trend names same-id findings whose content changed ──
+  const stamp2 = new Date(Date.now() + 2000).toISOString()
+  checkPayload = {
+    ...sampleReport,
+    generatedAt: stamp2,
+    checks: sampleReport.checks.map((c) => (c.id === 'js-directives'
+      ? { ...c, detail: c.detail + '\n新出现的一行：内容与上次不同' }
+      : c)),
+  }
+  hookStates = []
+  resetHooks()
+  const modT = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotT = null
+  modT.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotT = { spec, render }; return () => { slotT = null } },
+    },
+  })
+  renderAndCollect(slotT) // mount auto checkup with the changed detail
+  await settle() // the changed detail invalidates the ack → auto-opens
+  hookStates[0] = 'open'
+  const trendView = renderAndCollect(slotT)
+  assert.ok(trendView.text.includes('内容有变：js-directives'),
+    'same-id finding with changed detail reported as changed (v0.5-6)')
+
+  // ── v0.5-5: info-only findings cap the score at 99 ──
+  checkPayload = { ...sampleReport, summary: { high: 0, medium: 0, low: 0, info: 2, error: 0 } }
+  hookStates = []
+  resetHooks()
+  const modI = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotI = null
+  modI.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotI = { spec, render }; return () => { slotI = null } },
+    },
+  })
+  renderAndCollect(slotI) // mount auto checkup (quiet: the high finding is acked)
+  await settle()
+  hookStates[0] = 'idle'
+  const manualI = renderAndCollect(slotI)
+  manualI.el.props.onClick() // manual open to inspect the gauge
+  await settle()
+  hookStates[0] = 'open'
+  const cappedView = renderAndCollect(slotI)
+  const gaugeNum = cappedView.nodes.filter((n) => n.props.className === 'dsd-gauge__num')[0]
+  assert.ok(gaugeNum, 'score gauge rendered')
+  assert.equal(gaugeNum.children[0], '99', 'info findings cap the score at 99 (v0.5-5)')
+  console.log('CLIENT OK (v0.5) — dedup/trend/ack/toast/lang/score-cap all verified')
 }
 
 main().then(

@@ -8,7 +8,9 @@
  * service configs, approval=never upgrading severity, and a self-test route
  * reporting host load + version. v0.3: the report carries pluginVersion (V3)
  * matching the self-test version, which also exposes reportVersion and a
- * validated ?latest= tag echo (V8). Run with:
+ * validated ?latest= tag echo (V8). v0.5: the check route forwards ?lang= to
+ * the engine so the report body follows the client UI locale (v0.5-4).
+ * Run with:
  *
  *   node test/host.mjs
  */
@@ -120,6 +122,22 @@ async function main() {
   assert.equal(services1.status, 'pass')
   assert.match(services1.detail, /ask/)
   assert.match(services1.detail, /workspace-write/)
+
+  // v0.5-4: ?lang= drives the report body language — default (no param) is
+  // the Chinese body, ?lang=en returns the English one (titles are
+  // deterministic regardless of what the real home contains)
+  assert.equal(payload1.report.locale, 'zh')
+  assert.ok(payload1.report.checks.some((c) => c.title === '第三方插件盘点'), 'default report body is Chinese')
+  const resEn = mockRes()
+  await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/check?lang=en' }, resEn)
+  assert.equal(resEn.code, 200)
+  const payloadEn = JSON.parse(resEn.body)
+  assert.equal(payloadEn.report.locale, 'en')
+  assert.ok(payloadEn.report.checks.some((c) => c.title === 'Third-party plugin inventory'), 'en report body is English')
+  assert.ok(payloadEn.report.checks.every((c) => !/[\u4e00-\u9fff]/.test(c.title)), 'no Chinese titles in the en report')
+  const resLangJunk = mockRes()
+  await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/check?lang=fr' }, resLangJunk)
+  assert.equal(JSON.parse(resLangJunk.body).report.locale, 'zh', 'unknown lang falls back to zh')
 
   // flip the fake policy to never → severity upgrades to high without reload
   const { ctx: ctx2, registrations: regs2 } = makeCtx()

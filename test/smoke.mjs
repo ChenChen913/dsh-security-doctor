@@ -8,7 +8,11 @@
  * hashes are reported (F7), env baseURL is surfaced by hostname (F5), external
  * plugin egress hosts are listed with localhost excluded (F4), and the
  * approval-policy value drives severity (F2). Credential *values* must never
- * appear anywhere. Run with:
+ * appear anywhere. v0.5 additions: endpoint alias keys (apiUrl/apiEndpoint/
+ * endpoint…) and the extra LLM env overrides are surfaced (v0.5-3), every
+ * check renders bilingually via `locale` (v0.5-4), and the security-services
+ * advice no longer cites the invented "设置 → 插件配置 → Shell" path (v0.5-9).
+ * Run with:
  *
  *   node test/smoke.mjs
  */
@@ -56,7 +60,16 @@ async function buildFakeHome() {
   }))
   await fs.writeFile(path.join(packedDir, 'run.bin'), 'binary-opaque')
   await fs.writeFile(path.join(home, '.credentials.yaml'), 'DEEPSEEK_API_KEY: sk-not-a-real-key\n')
-  await fs.writeFile(path.join(home, 'settings.yaml'), 'ui-theme: dark\nbase_url: https://user:hunter2secret@evil.example/v1?key=abcd1234567890abcd\n')
+  // v0.5-3 fixture: alias spellings of the endpoint key (the old grep only
+  // matched `baseURL`/`base_url` and missed provider blocks configured under
+  // apiUrl / apiEndpoint / endpoint), all pointing at distinct hosts so each
+  // alias is individually assertable
+  await fs.writeFile(path.join(home, 'settings.yaml'),
+    'ui-theme: dark\n'
+    + 'base_url: https://user:hunter2secret@evil.example/v1?key=abcd1234567890abcd\n'
+    + 'apiUrl: https://alias-one.example/v1\n'
+    + 'apiEndpoint: https://alias-two.example/v1\n'
+    + 'endpoint: https://alias-three.example/v1\n')
   await fs.writeFile(path.join(workspace, 'AGENTS.md'), '# workspace instructions\n')
   return { root, home, workspace, profile }
 }
@@ -84,11 +97,14 @@ async function main() {
   const report = await runSecurityCheckup({
     home, workspace,
     services: servicesOk,
-    env: { DEEPSEEK_BASE_URL: 'https://env-endpoint.example/v1' },
+    env: { DEEPSEEK_BASE_URL: 'https://env-endpoint.example/v1', OPENAI_BASE_URL: 'https://openai-env.example/v1' },
     platform: 'linux',
     pluginVersion: '9.9.9',
   })
   const byId = Object.fromEntries(report.checks.map((c) => [c.id, c]))
+
+  // v0.5-4: the report states its own locale (zh default)
+  assert.equal(report.locale, 'zh')
 
   // F1: comment mention ignored, real directive flagged at its line
   assert.equal(byId['js-directives'].severity, 'high')
@@ -120,6 +136,18 @@ async function main() {
   assert.match(byId['external-endpoints'].detail, /env-endpoint\.example/)
   const envLine = byId['external-endpoints'].detail.split('\n').find((l) => l.includes('DEEPSEEK_BASE_URL'))
   assert.ok(envLine !== undefined && !envLine.includes('/v1'), 'env entry shows hostname only')
+
+  // v0.5-3: the second well-known env override is swept too (not just
+  // DEEPSEEK_BASE_URL), and every alias spelling of the endpoint key in
+  // user config is surfaced — the old grep saw only baseURL/base_url
+  assert.match(byId['external-endpoints'].detail, /OPENAI_BASE_URL/)
+  assert.match(byId['external-endpoints'].detail, /openai-env\.example/)
+  for (const alias of ['apiUrl', 'apiEndpoint', 'endpoint']) {
+    assert.match(byId['external-endpoints'].detail, new RegExp(alias + '\\s*:'), 'alias key ' + alias + ' matched (v0.5-3)')
+  }
+  assert.match(byId['external-endpoints'].detail, /alias-one\.example/)
+  assert.match(byId['external-endpoints'].detail, /alias-two\.example/)
+  assert.match(byId['external-endpoints'].detail, /alias-three\.example/)
 
   // S2 (self-audit): URL-embedded credentials and query secrets are masked
   // in echoed config lines; the hostname still shows
@@ -170,6 +198,29 @@ async function main() {
   assert.equal(report.summary.medium, 3)
   assert.match(report.verdict, /高危/)
 
+  // v0.5-4: locale='en' renders the whole report body in English — titles,
+  // detail prose, advice and verdict — with identical classification
+  const reportEn = await runSecurityCheckup({
+    home, workspace,
+    services: servicesOk,
+    env: { DEEPSEEK_BASE_URL: 'https://env-endpoint.example/v1', OPENAI_BASE_URL: 'https://openai-env.example/v1' },
+    platform: 'linux',
+    pluginVersion: '9.9.9',
+    locale: 'en',
+  })
+  assert.equal(reportEn.locale, 'en')
+  const enById = Object.fromEntries(reportEn.checks.map((c) => [c.id, c]))
+  assert.equal(enById['js-directives'].title, '!!js directives in config')
+  assert.match(enById['js-directives'].detail, /directive\(s\) found/)
+  assert.match(enById['third-party-plugins'].detail, /this plugin itself/)
+  assert.match(enById['third-party-plugins'].detail, /git ref not pinned/)
+  assert.match(enById['external-endpoints'].detail, /OPENAI_BASE_URL/)
+  assert.match(reportEn.verdict, /High-risk signals found/)
+  // every title is the English variant — no CJK leaks into an en report
+  for (const c of reportEn.checks) assert.ok(!/[\u4e00-\u9fff]/.test(c.title), 'en title is English: ' + c.id)
+  // classification is locale-independent
+  assert.deepEqual(reportEn.summary, report.summary)
+
   // F2 (danger): approval=never upgrades the services check to high
   const reportNever = await runSecurityCheckup({
     home, workspace,
@@ -179,6 +230,12 @@ async function main() {
   const never = reportNever.checks.filter((c) => c.id === 'security-services')[0]
   assert.equal(never.severity, 'high')
   assert.match(never.detail, /never/)
+  // v0.5-9: the advice points at the real mechanism (Web UI permission
+  // preset / DSH_PERMISSION_MODE env var) — the old text invented a
+  // "设置 → 插件配置 → Shell" path that does not exist in the DSH UI
+  assert.match(never.advice, /Web 界面/)
+  assert.match(never.advice, /DSH_PERMISSION_MODE/)
+  assert.ok(!never.advice.includes('插件配置'), 'no invented settings path (v0.5-9)')
 
   // F2 (danger): danger-full-access preset also upgrades to high
   const reportDfa = await runSecurityCheckup({
@@ -188,6 +245,8 @@ async function main() {
   })
   const dfa = reportDfa.checks.filter((c) => c.id === 'security-services')[0]
   assert.equal(dfa.severity, 'high')
+  assert.match(dfa.advice, /DSH_PERMISSION_MODE/)
+  assert.ok(!dfa.advice.includes('插件配置'), 'no invented settings path (v0.5-9)')
 
   // X1: 0400 (tighter than 600) counts as PASS on POSIX — inject the stat
   // because Windows cannot express group/other-empty permission bits
