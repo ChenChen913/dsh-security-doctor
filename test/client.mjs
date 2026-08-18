@@ -24,12 +24,16 @@ const sampleReport = {
   generatedAt: new Date('2026-08-16T12:00:00Z').toISOString(),
   home: 'C:\\Users\\t\\.dsh',
   workspace: 'D:\\proj',
-  pluginVersion: '0.4.0',
+  pluginVersion: '0.5.0',
   verdict: '测试判词',
   summary: { high: 1, medium: 1, low: 0, info: 0, error: 0 },
   checks: [
+    // V5-1 fixture: line 1 has a slash inside Chinese prose (must stay plain
+    // text), line 2 a home path followed by a full-width paren (chip must cut
+    // exactly before it), line 3 a github dep spec (no chip)
     { id: 'third-party-plugins', title: '盘点', severity: 'medium', status: 'finding', detail: '- dsh-x', advice: '审' },
-    { id: 'js-directives', title: 'JS 检查', severity: 'high', status: 'finding', detail: 'profiles\\web\\cordis.patch.yml:6: x', advice: '查' },
+    { id: 'js-directives', title: 'JS 检查', severity: 'high', status: 'finding',
+      detail: '在 cordis 补丁/配置文件中发现 !!js 指令\n未发现 ~/.dsh/.credentials.yaml（Key 可能来自环境变量）\n依赖 github:ChenChen913/dsh-security-doctor#v0.4.0) 已锁定', advice: '查' },
     { id: 'external-endpoints', title: '端点', severity: 'info', status: 'pass', detail: '无', advice: 'ok' },
   ],
 }
@@ -37,18 +41,21 @@ const sampleReport = {
 let capturedModule = null
 let fetchCalls = []
 let ghLatest = { tag_name: 'v9.9.9' } // what the fake GitHub release API returns
+let ghStatus = 200 // 404 → "no release published" path (user finding 3.2-4)
+let checkPayload = sampleReport // mount/auto checkup response (user finding 3.2-5)
 globalThis.window = {
   __ModuleLoader__: { load(m) { capturedModule = m } },
   fetch(url, init) {
     fetchCalls.push({ url: String(url), init })
     const u = String(url)
     if (u.includes('api.github.com')) {
+      if (ghStatus === 404) return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
       return Promise.resolve({ ok: true, json: () => Promise.resolve(ghLatest) })
     }
     if (u.includes('/self-test')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.4.0' }) })
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.5.0' }) })
     }
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: sampleReport }) })
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: checkPayload }) })
   },
   localStorage: {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -215,7 +222,11 @@ async function main() {
   // V3: the report footer states the plugin version that produced it
   await settle()
   const upd0 = renderAndCollect(slot)
-  assert.ok(upd0.text.includes('插件 v0.4.0'), 'report footer shows plugin version')
+  assert.ok(upd0.text.includes('插件 v0.5.0'), 'report footer shows plugin version')
+  // V5-1: only the real home path becomes a chip — Chinese prose with a
+  // slash and the github dep spec must stay plain text
+  const chips = upd0.nodes.filter((n) => n.props.className === 'dsd-path').map((n) => n.children.join(''))
+  assert.deepEqual(chips, ['~/.dsh/.credentials.yaml'], 'path chips are exactly the real home path')
   // v0.4 liquid-glass overview: score gauge (100−25·1−10·1 = 65), dots, capsules
   assert.ok(upd0.nodes.some((n) => n.props.className === 'dsd-gauge'), 'score gauge svg rendered')
   assert.ok(upd0.text.includes('安全评分'), 'gauge label shown')
@@ -283,6 +294,44 @@ async function main() {
   const buttonEn = slotEn.render({ wide: true })
   assert.equal(buttonEn.props['aria-label'], 'Security checkup')
   console.log('CLIENT OK (en-US) — aria-label:', buttonEn.props['aria-label'])
+
+  // ── 3.2-5: mount-time auto checkup must NOT auto-open without a high ──
+  setNavigator('zh-CN')
+  checkPayload = { ...sampleReport, summary: { high: 0, medium: 1, low: 0, info: 0, error: 0 } }
+  ghStatus = 404
+  hookStates = []
+  resetHooks()
+  const mod3 = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slot3 = null
+  mod3.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slot3 = { spec, render }; return () => { slot3 = null } },
+    },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const autoIdle = renderAndCollect(slot3)
+  assert.equal(autoIdle.nodes.filter((n) => n.props.role === 'dialog').length, 0, 'no auto-open without high findings (3.2-5)')
+  assert.equal(autoIdle.el.props['aria-label'], '安全体检', 'button shows the idle label after the background checkup')
+  // manual click still opens the report (high findings back in the payload so
+  // the fake useEffect's re-triggered background runs keep the modal open)
+  checkPayload = sampleReport
+  autoIdle.el.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const manualOpen = renderAndCollect(slot3)
+  assert.equal(manualOpen.nodes.filter((n) => n.props.role === 'dialog').length, 1, 'manual click opens the report')
+  // 3.2-4: GitHub 404 → dedicated "no release" wording, not network failure
+  const updBtn3 = manualOpen.nodes.filter((n) => n.type === 'button').find((b) => b.children.join('').includes('检查更新'))
+  updBtn3.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const after404 = renderAndCollect(slot3)
+  assert.ok(after404.text.includes('未查询到已发布的 Release'), '404 surfaces the no-release message (3.2-4)')
+  assert.ok(!after404.text.includes('不可达'), '404 is not reported as network failure')
+  console.log('CLIENT OK (3.2-4/3.2-5) — no auto-open without high; 404 wording distinct')
 }
 
 main().then(

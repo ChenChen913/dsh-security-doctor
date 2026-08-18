@@ -4,9 +4,42 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [0.5.0] — 2026-08-18
+
+针对用户实测反馈（2026-08-16 起，含 v0.4 追加与 UI 实测定位）的修复，逐项计划与验证记录见 [docs/FIX-PLAN-v0.5.md](docs/FIX-PLAN-v0.5.md)。
+
+### 修复（引擎）
+
+- **出网扫描剥注释（P1）**：C7 扫描前先剥离 JS 块注释与行注释（保护 `scheme://` 冒号前缀）——注释里的示例 URL 不再计入外联结果，真实代码 URL 不受影响。
+- **自身盘点降噪（P2）**：唯一外来插件是本插件自身、且已锁定、且无安装脚本时，盘点降为 `info/pass`，不再常驻"关注"。
+- **处方建议版本动态化（P3）**：盘点建议不再写死旧版本标签，改用运行时注入的 `pluginVersion` 生成；无版本时回退通用文案。
+- **icacls 未解析 SID 标注（P4）**：ACL 列表中 `S-1-5-…` 形态的账户追加"（未解析 SID）"标注。
+
+### 修复（客户端）
+
+- **路径 chip 不再吞中文（P5）**：重写路径识别正则——Windows 盘符与 `~/` 路径允许 CJK 字符但遇全角标点即停；多段相对路径保持 ASCII-only。"补丁/配置文件中发现"这类中文正文不再被切成等宽路径块。
+- **卡片头窄窗口不换行（P6）**：卡片标题 ellipsis 截断，头部单行布局。
+- **挂载不再自动弹窗（P7）**：安装后自动体检只更新报告与徽标；**仅存在未确认高危时才自动弹出**，刷新页面不再打扰。
+- **检查更新区分 404 与网络失败（P8）**：HTTP 404 单独提示"未查询到已发布的 Release"，与"网络或 GitHub 不可达"区分。
+- **低端设备 backdrop-filter 降级（P9）**：`prefers-reduced-motion` 下关闭多层磨砂效果并回退不透明背景。
+
+### 仓库与文档
+
+- **`界面/` → `design/`（P10）**：中文目录名在 Windows 解包时乱码，重命名为 `design/`；`screen.png` 从仓库移除，改为 GitHub Release 附件。
+- **文件清理（P11）**：删除历史计划文档（`PLAN.md`/`FIX-PLAN.md`/`VERSIONING-PLAN.md`/`docs/feedback/`，结论已沉淀在 CHANGELOG），修复指向已删文件的死链。
+- **README 瘦身（P12）**：中英两份 README 压到约 80 行——功能并入简介与检查项表、安装/更新/迁移/回退合并、删「工作原理」、常见问题只留高频 3 条。
+
+### 实测环境
+
+| 项 | 值 |
+| --- | --- |
+| harness | DSH `0.1.0-rc.5`（Windows，源码运行） |
+| OS | Windows 实测；macOS / Linux 由 CI（ubuntu/macos/windows × Node 22/24）覆盖 |
+| Node | ≥ 22（22/24 CI 通过） |
+
 ## [0.4.0] — 2026-08-16
 
-报告弹窗「液态玻璃（Liquid Glass）」界面重设计。设计源文件与规范存档于 [`界面/`](界面/DESIGN.md)（DESIGN.md + code.html 原型 + 截图）。
+报告弹窗「液态玻璃（Liquid Glass）」界面重设计。设计源文件与规范存档于 [`design/`](design/DESIGN.md)（DESIGN.md + code.html 原型；效果图见 v0.4.0 Release 附件）。
 
 ### 新增
 
@@ -33,7 +66,7 @@
 
 ## [0.3.0] — 2026-08-16
 
-针对用户反馈《[版本管理与分发问题](docs/feedback/2026-08-16-versioning-feedback.md)》的修复（计划与执行记录：[docs/VERSIONING-PLAN.md](docs/VERSIONING-PLAN.md)）。
+针对用户反馈（版本管理与分发问题，2026-08-16）的修复。
 
 ### 新增
 
@@ -69,7 +102,7 @@
 
 ## [0.2.0] — 2026-08-16
 
-修复实测反馈 28 项（P0×5 + P1×15 + P2×8，逐项记录见 [docs/FIX-PLAN.md](docs/FIX-PLAN.md)）。要点：
+修复实测反馈 28 项（P0×5 + P1×15 + P2×8）。要点：
 
 - **服务探测改走 `ctx.get()`**（F2）：修复 `0.1.0-rc` 系列 harness 上"防护服务未挂载"的误报——属性访问只对注入服务生效，官方路径是 `ctx.get()`。
 - **插件自辨身份**（F3）：盘点中标注"本插件自身"，未锁定时直接给出锁定命令——先管好自己再谈示范。
@@ -87,6 +120,7 @@
 
 实测环境：DSH `0.1.0-rc.5`（Windows 源码运行）。
 
+[0.5.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.2.0...v0.2.1
