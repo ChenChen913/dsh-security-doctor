@@ -30,7 +30,11 @@
  * are click-to-expand buttons (#4), a fresh mount within the 10-minute
  * window reuses the cached report without re-fetching (#5), the capped
  * gauge shows a visible 99-cap cue (#9), and the acked button title
- * advertises the undo (#10). Run with:
+ * advertises the undo (#10). Layout-review round additions: the modal
+ * re-anchors text left against centered host containers, the body owns
+ * the scroll via an explicit flex:1 + min-height:0 contract with 24px
+ * bottom padding, the card action column wraps instead of being sliced
+ * by overflow:hidden, and card surfaces are lifted for contrast. Run with:
  *
  *   node test/client.mjs
  */
@@ -343,6 +347,31 @@ async function main() {
   assert.equal(idleAcked.nodes.filter((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-badge')).length, 0,
     'acknowledged high finding no longer drives the badge (v0.5-7)')
 
+  // ── v0.6.1 review additions (modal open again, js-directives acked) ──
+  // #10: the acked button's title advertises the undo so users discover it
+  hookStates[0] = 'open'
+  const ackOpen = renderAndCollect(slot)
+  const ackedBtn = ackOpen.nodes.filter((n) => n.type === 'button').find((b) => b.children.includes('已阅 ✓'))
+  assert.ok(ackedBtn && typeof ackedBtn.props.title === 'string' && ackedBtn.props.title.includes('撤销'),
+    'acked button title advertises the undo (v0.6.1 #10)')
+  // #2: the hide/show-acked toggle folds acknowledged cards out of the list
+  const ackToggle = ackOpen.nodes.filter((n) => n.props.className === 'dsd-acktoggle')[0]
+  assert.ok(ackToggle, 'hide/show-acked toggle rendered when findings are acked (v0.6.1 #2)')
+  const toggleBtn = ackToggle.children[0]
+  assert.equal(toggleBtn.children[0], '隐藏已阅（1）', 'toggle label carries the acked count (v0.6.1 #2)')
+  toggleBtn.props.onClick()
+  hookStates[0] = 'open'
+  const hiddenView = renderAndCollect(slot)
+  assert.ok(!hiddenView.text.includes('JS 检查'), 'acked card leaves the list when hidden (v0.6.1 #2)')
+  assert.ok(hiddenView.text.includes('盘点'), 'unacked findings stay visible while hiding acked ones')
+  // toggle back OFF so later blocks (layout contract) see the full list again
+  const toggleBtn2 = hiddenView.nodes.filter((n) => n.type === 'button').find((b) => String(b.children[0]).startsWith('显示已阅'))
+  assert.ok(toggleBtn2, 'toggle flips to the show-acked label (v0.6.1 #2)')
+  toggleBtn2.props.onClick()
+  hookStates[0] = 'open'
+  const restoredView = renderAndCollect(slot)
+  assert.ok(restoredView.text.includes('JS 检查'), 'toggle restores the acked card (v0.6.1 #2)')
+
   // ── v0.6 layout contract ──
   // precondition: a prior history entry with a DIFFERENT generatedAt, so
   // diffLastRun finds a baseline and the trend stats render as their four
@@ -362,6 +391,17 @@ async function main() {
   assert.equal(metaRows[0].props.title, 'dsh-x', 'metadata row keeps the full text as its tooltip')
   assert.ok(!layoutView.text.split(' ').includes('- dsh-x'), 'the "- " bullet is stripped from the visible text')
   assert.ok(/来源\s*·\s*dsh-x/.test(layoutView.text), 'source rows carry the 来源 prefix (v0.6)')
+  // v0.6.1 #4: metadata rows are click-to-expand buttons (touch-visible)
+  assert.equal(metaRows[0].props['aria-expanded'], false, 'metadata row starts collapsed (v0.6.1 #4)')
+  metaRows[0].props.onClick()
+  // re-pin the phase: the mount effect re-evaluates it on every render and
+  // (with the high finding acked) settles on 'idle' — same convention as the
+  // pass-row click test below
+  hookStates[0] = 'open'
+  const metaOpen = renderAndCollect(slot)
+  const openRow = metaOpen.nodes.filter((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-check__meta-row--open'))[0]
+  assert.ok(openRow && openRow.props['aria-expanded'] === true,
+    'clicking a metadata row expands it in place (v0.6.1 #4)')
   // finding cards share the three-column skeleton: dot | main | side
   assert.ok(layoutView.nodes.some((n) => n.props.className === 'dsd-check__main'), 'finding card main column rendered')
   assert.ok(layoutView.nodes.some((n) => n.props.className === 'dsd-check__side'), 'finding card action column rendered')
@@ -394,6 +434,45 @@ async function main() {
   assert.ok(passOpen.nodes.some((n) => n.props.className === 'dsd-check__more'), 'pass row expands in place')
   const passRowOpen = passOpen.nodes.filter((n) => n.props.className === 'dsd-check__row')[0]
   assert.equal(passRowOpen.props['aria-expanded'], true, 'aria-expanded flips with the row state')
+  // v0.6.1 #3: the pass row carries a one-line ellipsized detail summary
+  const passSummary = layoutView.nodes.filter((n) => n.props.className === 'dsd-check__summary')[0]
+  assert.ok(passSummary && passSummary.children[0] === '无',
+    'pass row shows its first detail line as the summary (v0.6.1 #3)')
+
+  // ── v0.6.1 stylesheet contract (read from the injected <style>) ──
+  // the fake document.head captures every sheet; the rules are static so any
+  // captured copy is authoritative
+  const css = styleSheets.join('\n')
+  // collect EVERY `sel{…}` occurrence (the same selector legitimately shows
+  // up in media queries too — e.g. prefers-reduced-motion resets — so a
+  // first-match-only lookup would grab the wrong copy)
+  const ruleOf = (sel) => {
+    const re = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\{[^}]*\\}', 'g')
+    return (css.match(re) || []).join('\n')
+  }
+  // previous round #1: the acked dim is scoped to the prose column — the
+  // severity bar, dot and buttons keep full opacity (seen ≠ muted red)
+  assert.ok(css.includes('.dsd-check--acked .dsd-check__main{opacity:.6}'),
+    'acked dim is scoped to the main column only (v0.6.1 #1)')
+  // layout review #1: explicit left alignment — host containers that center
+  // text must never leak into URLs, paths or source lists
+  assert.ok(ruleOf('.dsd-modal').includes('text-align:left'),
+    'modal re-anchors text left against centered host containers (layout #1)')
+  // layout review #2: explicit three-section contract + bottom breathing room
+  const bodyRule = ruleOf('.dsd-modal__body')
+  assert.ok(bodyRule.includes('flex:1 1 auto') && bodyRule.includes('min-height:0'),
+    'body owns the scroll: flex:1 + min-height:0 three-section contract (layout #2)')
+  assert.ok(bodyRule.includes('padding:16px 20px 24px'),
+    'scroll area keeps 24px bottom padding so the last card clears the edge (layout #2)')
+  // layout review #3: the action column wraps instead of being sliced by the
+  // card's overflow:hidden on narrow widths
+  assert.ok(ruleOf('.dsd-check__side').includes('flex-wrap:wrap'),
+    'action column wraps instead of clipping buttons (layout #3)')
+  // layout review #4: card surfaces lifted (44→56%, hover 62→72%) + hairline
+  // shadow so cards read distinctly on the frosted modal
+  const checkRule = ruleOf('.dsd-check')
+  assert.ok(checkRule.includes('rgba(255,255,255,.56)') && checkRule.includes('box-shadow'),
+    'card surface lifted for contrast on the frosted modal (layout #4)')
 
   console.log('CLIENT OK — slot:', slot.spec.id, '| cards:', titles.join(' / '))
 
@@ -595,6 +674,11 @@ async function main() {
   const gaugeNum = cappedView.nodes.filter((n) => n.props.className === 'dsd-gauge__num')[0]
   assert.ok(gaugeNum, 'score gauge rendered')
   assert.equal(gaugeNum.children[0], '99', 'info findings cap the score at 99 (v0.5-5)')
+  // v0.6.1 #9: the capped gauge carries a visible cue so 99 never reads as
+  // a natural score
+  const capNote = cappedView.nodes.filter((n) => n.props.className === 'dsd-gauge__cap')[0]
+  assert.ok(capNote && String(capNote.children[0]).includes('上限 99'),
+    'capped gauge shows the visible 99-cap cue (v0.6.1 #9)')
   console.log('CLIENT OK (v0.5) — dedup/trend/ack/toast/lang/score-cap all verified')
 }
 
