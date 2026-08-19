@@ -34,7 +34,10 @@
  * re-anchors text left against centered host containers, the body owns
  * the scroll via an explicit flex:1 + min-height:0 contract with 24px
  * bottom padding, the card action column wraps instead of being sliced
- * by overflow:hidden, and card surfaces are lifted for contrast. Run with:
+ * by overflow:hidden, and card surfaces are lifted for contrast. v0.6.2
+ * round: no clip anywhere in the card stack (overflow:hidden removed from
+ * cards and the pass group), titles/summaries wrap via word-break instead
+ * of truncating, and pass rows carry their own corner rounding. Run with:
  *
  *   node test/client.mjs
  */
@@ -473,6 +476,29 @@ async function main() {
   const checkRule = ruleOf('.dsd-check')
   assert.ok(checkRule.includes('rgba(255,255,255,.56)') && checkRule.includes('box-shadow'),
     'card surface lifted for contrast on the frosted modal (layout #4)')
+  // v0.6.2 layout review: NO clipping anywhere in the card stack — cards are
+  // height:auto, so overflow:hidden had no legitimate job; titles and pass
+  // summaries wrap (word-break) instead of being ellipsized mid-sentence,
+  // and the pass group rounds its first/last rows per-row since the group
+  // clip is gone
+  assert.ok(!checkRule.includes('overflow:hidden'),
+    'finding card never clips: overflow:hidden removed (v0.6.2 #1)')
+  assert.ok(!ruleOf('.dsd-passgroup').includes('overflow:hidden'),
+    'pass group never clips: overflow:hidden removed (v0.6.2 #1)')
+  const titleRule = ruleOf('.dsd-check__title')
+  assert.ok(!titleRule.includes('white-space:nowrap') && titleRule.includes('word-break:break-word'),
+    'card titles wrap naturally instead of truncating (v0.6.2 #1)')
+  const summaryRule = ruleOf('.dsd-check__summary')
+  assert.ok(!summaryRule.includes('white-space:nowrap') && summaryRule.includes('word-break:break-word'),
+    'pass summaries wrap naturally instead of truncating (v0.6.2 #1)')
+  assert.ok(css.includes('.dsd-passgroup .dsd-check:first-child .dsd-check__row{border-radius:15px 15px 0 0}')
+    && css.includes('.dsd-passgroup .dsd-check:last-child .dsd-check__row{border-radius:0 0 15px 15px}'),
+    'pass rows carry the corner rounding the group clip used to do (v0.6.2 #1)')
+  // v0.6.2 #2: action buttons live in the flex flow (no absolute corner
+  // positioning) — the side column is a wrapping flex row, and the only
+  // absolute elements on cards are decorative (::before severity bar)
+  assert.ok(ruleOf('.dsd-check__side').includes('display:flex') && !ruleOf('.dsd-check__side').includes('position:absolute'),
+    'action buttons stay in the flex flow, never absolutely positioned (v0.6.2 #2)')
 
   console.log('CLIENT OK — slot:', slot.spec.id, '| cards:', titles.join(' / '))
 

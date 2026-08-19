@@ -4,6 +4,22 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [0.6.2] — 2026-08-19
+
+针对用户实测反馈的三点布局意见（文字腰斩截断 / 按钮溢出 / 底部遮挡）做专项复查与修复。视觉方向、检测逻辑、评分公式、数据结构、DOM 结构均不变。
+
+### 修复（布局专项，3 点意见逐条）
+
+- **卡片零裁切**：移除检测项卡片与通过组列表的 `overflow:hidden`——卡片本就是自适应高度（无固定 height/max-height），该裁切只剩隐患没有职责。高危红条（`::before`，内缩 12px）在卡片内部不受影响，圆角由 `border-radius` 自身处理背景。
+- **文字自然换行**：卡片标题与通过行摘要把 `nowrap + ellipsis` 三件套换成 `word-break: break-word`，长检查名 / 长路径撑开卡片高度向下延展，不再被省略号截断。状态圆点保持与标题首行精确对齐（注释已锁定数值关系）。
+- **通过组圆角补位**：组级裁切移除后，首行 / 末行 / 单行的 hover 背景改为逐行圆角（15px = 组圆角 16px 减 1px 边框），视觉效果与裁切方案一致。
+- **按钮零绝对定位（复查确认）**：所有卡片操作按钮（处方 / 已阅 / 复检）均在 flex 流内（`flex-wrap` 换行），无 `position:absolute; bottom/right` 定位；上一轮的换行修复叠加本轮的零裁切，按钮被切一半的问题彻底消除。
+- **三段式滚动（复查确认）**：弹窗标准三段结构（Header `flex:none` / Body `flex:1 + min-height:0` 独立滚动 / Footer `flex:none` 独立行）在 0.6.1 已落地，Footer 非悬浮层不覆盖内容，故无需 120px 备选方案；滚动区底部保持 24px 呼吸空间。
+
+### 测试
+
+样式契约断言新增：卡片与通过组无 `overflow:hidden`、标题 / 摘要含 `word-break` 且无 `nowrap`、通过组首末行圆角规则、操作列无绝对定位。三套测试（smoke / host / client）全绿。
+
 ## [0.6.1] — 2026-08-19
 
 两轮反馈合并：v0.6.0 缺点清单 10 项修复 + 前端布局复查（排版对齐 / 三段式滚动 / 溢出裁切 / 对比度）。视觉方向（液态玻璃 / 半透明 / 黑白灰）、检测逻辑、评分公式、数据结构均不变。DOM 结构未再变动（`0.6.0` 已声明的 `.dsd-check__main` / `__side` 契约继续有效）。
