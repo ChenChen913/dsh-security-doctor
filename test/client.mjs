@@ -19,11 +19,18 @@
  * (v0.5-5), the trend line names same-id findings whose content changed
  * (v0.5-6), findings can be acknowledged and stop driving the badge (v0.5-7),
  * and CJK-glued slash tokens never become path chips (v0.5-10). v0.6
- * additions: passed checks collapse into ONE grouped list of rows (dot +
- * title + 正常 + chevron; click expands detail+advice in place), "- "
- * inventory lines render as metadata rows, the trend renders as separate
- * nowrap stat spans, and the footer splits into a metadata line plus a
- * safety-note line. Run with:
+ * additions: passed checks collapse into ONE grouped list of
+ * rows (dot + title + 正常 + chevron; click expands detail+advice in place),
+ * "- " inventory lines render as metadata rows, the trend renders as
+ * separate nowrap stat spans, and the footer splits into a metadata line
+ * plus a safety-note line. v0.6.1 additions (review round "v0.6.0 缺点清
+ * 单"): the acked dim is scoped to the prose column via the captured
+ * stylesheet (#1), a hide/show-acked toggle removes acked cards from the
+ * list (#2), pass rows carry a one-line detail summary (#3), metadata rows
+ * are click-to-expand buttons (#4), a fresh mount within the 10-minute
+ * window reuses the cached report without re-fetching (#5), the capped
+ * gauge shows a visible 99-cap cue (#9), and the acked button title
+ * advertises the undo (#10). Run with:
  *
  *   node test/client.mjs
  */
@@ -81,13 +88,16 @@ globalThis.window = {
 }
 // client code calls bare fetch(); in the browser that IS window.fetch — mirror it here
 globalThis.fetch = window.fetch
-// minimal DOM surface the style effect and modal focus-management touch
+// minimal DOM surface the style effect and modal focus-management touch.
+// head.appendChild CAPTURES the injected stylesheet so layout-regression
+// assertions can read the actual CSS (v0.6.1 #1: the acked dim scope)
+const styleSheets = []
 globalThis.document = {
   activeElement: null,
   querySelector: () => null,
   createElement: () => ({ dataset: {}, textContent: '', remove() {}, style: {}, click() {} }),
   body: { appendChild() {} },
-  head: { appendChild() {} },
+  head: { appendChild(el) { styleSheets.push(String(el.textContent)) } },
 }
 
 // Node 21+ ships a built-in global navigator whose language follows the OS
@@ -455,7 +465,10 @@ async function main() {
   console.log('CLIENT OK (3.2-4/3.2-5) — no auto-open without high; 404 wording distinct')
 
   // ── v0.5-2: identical auto checkups dedup history; manual runs record ──
+  // (also drop the v0.6.1 report cache — a fresh mount would reuse it and
+  // skip the fetch, so no history entry would ever be written here)
   store.delete('dsd.history')
+  store.delete('dsd.cachedReport')
   const stamp1 = new Date().toISOString()
   checkPayload = { ...sampleReport, generatedAt: stamp1 }
   hookStates = []
@@ -487,7 +500,43 @@ async function main() {
   assert.equal(JSON.parse(store.get('dsd.history')).length, 2,
     'manual run always records (v0.5-2)')
 
+  // ── v0.6.1 #5: a fresh mount inside the 10-minute window reuses the cache ──
+  // (the manual run above just refreshed dsd.cachedReport with the current
+  // payload; mounting a brand-new module must NOT fetch /check again yet must
+  // still render the full report from the cache)
+  const checkCallsBefore = fetchCalls.filter((c) => String(c.url).includes('/dsh-security-doctor/check')).length
+  assert.ok(checkCallsBefore > 0, 'fixture sanity: /check was fetched at least once so far')
+  hookStates = []
+  resetHooks()
+  const modC = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotC = null
+  modC.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotC = { spec, render }; return () => { slotC = null } },
+    },
+  })
+  renderAndCollect(slotC) // mount → cache hit, /check must NOT be fetched
+  await settle()
+  assert.equal(
+    fetchCalls.filter((c) => String(c.url).includes('/dsh-security-doctor/check')).length,
+    checkCallsBefore,
+    'fresh mount within 10 minutes skips the /check fetch (v0.6.1 #5)',
+  )
+  hookStates[0] = 'open'
+  const cachedView = renderAndCollect(slotC)
+  assert.ok(cachedView.nodes.some((n) => n.props.role === 'dialog'), 'cached report still renders the modal')
+  assert.ok(cachedView.text.includes('测试判词'), 'cached report content is on screen (v0.6.1 #5)')
+  console.log('CLIENT OK (v0.6.1 #5) — 10-minute cache: fresh mount reuses report, no re-fetch')
+
   // ── v0.5-6: the trend names same-id findings whose content changed ──
+  // (cache dropped again: the mount must really fetch, else the changed
+  // detail never reaches the fingerprint comparison and nothing re-arms)
+  store.delete('dsd.cachedReport')
   const stamp2 = new Date(Date.now() + 2000).toISOString()
   checkPayload = {
     ...sampleReport,
@@ -518,6 +567,8 @@ async function main() {
     'same-id finding with changed detail reported as changed (v0.5-6)')
 
   // ── v0.5-5: info-only findings cap the score at 99 ──
+  // (cache dropped so the mount auto checkup fetches THIS payload's summary)
+  store.delete('dsd.cachedReport')
   checkPayload = { ...sampleReport, summary: { high: 0, medium: 0, low: 0, info: 2, error: 0 } }
   hookStates = []
   resetHooks()
