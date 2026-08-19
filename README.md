@@ -10,11 +10,11 @@
 
 | 检查 | 说明 | 命中级别 |
 | --- | --- | --- |
-| 配置中的 `!!js` 表达式 | 扫描 `~/.dsh` 下所有 cordis 补丁/配置文件（已剥离注释，注释里提到不算）；`!!js` 在加载时会被求值执行 | 高危 |
+| 配置中的 `!!js` 表达式 | 扫描 `~/.dsh` 下所有 cordis 补丁/配置文件（已剥离注释与 `\|`/`>` 字面量块，文档示例不算）；`!!js` 在加载时会被求值执行 | 高危 |
 | 第三方插件盘点 | 各 profile 依赖盘点，区分官方 `@deepseek-ai/*` 与外来插件；标记未锁定的 git 引用、携带 `prepare`/`postinstall` 的包；自辨身份 | 关注 |
-| 已装插件出网扫描 | 静态扫描外来插件源码外联地址（`https?://`/`wss?://`，已剥注释，排除本机回环），按插件列域名；无可扫描源码的插件单独提示 | 说明/关注 |
-| 凭据文件权限 | `~/.dsh/.credentials.yaml`：POSIX 查组/其他位（0400/0600 合格）；Windows 经 `icacls` 只读查 ACL 账户，Users/Everyone 可读报关注。**只看权限，永不读内容** | 关注 |
-| 工作区指令文件 | `AGENTS.md` / `CLAUDE.md` / `.agents/` 等（SHA-256 哈希，跨次比对"新增/变更"） | 说明 |
+| 已装插件出网扫描 | 静态扫描外来插件源码外联地址（`https?://`/`wss?://`，已剥注释，排除本机回环），按插件列域名；并标注 `eval`/base64/原始 `node:net`·`node:dns` 等动态/混淆特征（初筛信号，提示人工复核）；无可扫描源码的插件单独提示 | 说明/关注 |
+| 凭据文件权限 | `~/.dsh/.credentials.yaml`：POSIX 查组/其他位（0400/0600 合格）；Windows 经 `icacls` 只读查 ACL 账户，宽泛账户（Users/Everyone 及其 Well-Known SID 与本地化名称）可读报关注。**只看权限，永不读内容** | 关注 |
+| 工作区指令文件 | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `.github/copilot-instructions.md` / `.agents/` / `.cursor/rules/` 等（SHA-256 哈希，跨次比对"新增/变更"） | 说明 |
 | 外部端点配置 | yml 配置中的 `baseURL` 行 + 环境变量 `DEEPSEEK_BASE_URL` 实际生效值（只显示主机名） | 说明 |
 | 核心防护服务与策略 | 经 `ctx.get()` 探测装载；读实际策略值，审批策略 `never` 或预设 `danger-full-access` 直接升高危 | 关注/高危 |
 
@@ -25,12 +25,12 @@
 > ⚠️ **两个必读**：① 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载新插件层）；② 重启会短暂中断当前对话，先保存再重启。
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1
 ```
 
-`#v0.7.0` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`。
+`#v0.7.1` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1`。
 
-装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.7.0` + 侧栏出现按钮）：
+装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.7.1` + 侧栏出现按钮）：
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
@@ -49,7 +49,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 ## 安全承诺
 
 1. **只读**：不执行被检查对象的代码、不改用户文件；唯一外部命令是 Windows 下 `icacls <文件>` 只读 ACL 查询（固定参数、无 shell、无用户输入拼接）。
-2. **默认零外发**：本机 GET 路由要求配对头 `x-dsh-security-doctor: 1`，防本机其他网页跨站读取报告；v0.7.0 起同时校验 `Host` 头为本机地址，阻断 DNS rebinding 场景下的同源伪装读取；除手动检查更新外代码中不存在任何外部域名。
+2. **默认零外发**：本机 GET 路由要求配对头 `x-dsh-security-doctor: 1`，防本机其他网页跨站读取报告；v0.7.0 起同时校验 `Host` 头为本机地址，阻断 DNS rebinding 场景下的同源伪装读取（v0.7.1 起局域网/反代部署可用环境变量 `DSH_ALLOWED_HOSTS=主机名1,主机名2` 扩展白名单，默认仍仅本机）；除手动检查更新外代码中不存在任何外部域名。
 3. **凭据零接触**：只查权限位/ACL，内容不读不传不回显；回显行自动脱敏，测试含"凭据值零泄漏"断言，任何人可复跑。
 
 先用自己发布的检测标准审过自己：[自审报告](docs/SELF-AUDIT.md) · [安全政策](SECURITY.md)。零运行时依赖、零安装脚本、零构建（`node --check` 可验）；CI actions 钉 commit SHA，三平台 × Node 22/24 矩阵。验证：`node test/smoke.mjs && node test/host.mjs && node test/client.mjs`。
@@ -70,6 +70,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 
 | 插件版本 | 实测 harness | OS | 备注 |
 | --- | --- | --- | --- |
+| v0.7.1 | DSH 0.1.0-rc.5 | Windows（源码运行） | 反馈修复版：本地化 Windows ACL（SID/zh-CN）、YAML 字面量块、混淆特征标注、指令文件补全、DSH_ALLOWED_HOSTS；macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
 | v0.7.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 评审修复版：传递依赖扫描、安全层补丁检测、Host 头校验等；macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
 | v0.6.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
 | v0.5.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |

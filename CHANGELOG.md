@@ -4,6 +4,22 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [0.7.1] — 2026-08-19
+
+第二轮评审反馈修复：本地化 Windows 的 ACL 识别、YAML 字面量块误报、出网扫描混淆盲区、指令文件候选补全、局域网部署的 Host 白名单。5 项反馈全部属实并修复，每项独立测试。
+
+### 修复
+
+- **多语言 Windows 的宽泛账户识别（反馈 #1）**：icacls 会把内建组解析成系统区域设置名称（zh-CN 显示 所有人 / 经过身份验证的用户），无法解析的账户输出裸 SID——旧正则只认英文名，两者都会漏报。现同时匹配 Well-Known SID（Everyone `S-1-1-0`、Authenticated Users `S-1-5-11`、BUILTIN\Users `S-1-5-32-545`，锚定匹配，`S-1-5-32-544` Administrators 等不受影响）与常见 zh-CN 名称。
+- **YAML 字面量块误报（反馈 #2）**：`key: |` / `key: >` 多行块内的 `!!js` 或 `- remove:` 字样是字符串内容（文档、示例），旧逐行扫描会当成生效指令/补丁操作误报（!!js 是高危、安全层补丁是高危）。新增 `yamlEffectiveLines` 轻量状态机：按缩进跳过块内容，块结束（缩进回落）后恢复正常处理；C1 与 C1b 共用。
+- **出网扫描混淆盲区（反馈 #3）**：静态 URL 正则看不到 `'h'+'ttps://…'` 拼接、base64 组装与 `node:net`/`node:dns` 原始通道。现对每个插件统计并标注 `eval(`、`new Function(`、`Buffer.from(base64)`、`net/dgram/dns/child_process/worker_threads` 导入、`dns.resolve/lookup` 特征——命中即在该插件行标注"⚠ 动态/混淆特征"并把检查升为 medium；特征是初筛信号（不等于恶意），报告注明供人工复核。
+- **指令文件候选补全（反馈 #4）**：新增 `GEMINI.md`（Gemini CLI）与 `.github/copilot-instructions.md`（GitHub Copilot）；`.vscode/settings.json` 条件纳入——仅当内容含 prompt/instruction 类键时跟踪（无条件跟踪会把每次无关的编辑器设置变更都误报为指令文件变更），显示为 `.vscode/settings.json (prompt keys)`。
+- **局域网/反代部署的 Host 白名单（反馈 #5）**：v0.7.0 的 Host 头校验严格限定本机地址，局域网 IP 或反代域名访问会 403。新增 `DSH_ALLOWED_HOSTS` 环境变量（逗号分隔主机名，可带端口，模块加载时读取）扩展白名单；默认行为不变（仍仅本机），未列出的域名（rebinding 攻击者）依旧拒绝。
+
+### 测试
+
+smoke：SID/zh-CN 组名命中与 Administrators 排除、字面量块内 `!!js`/`remove` 不计数（js 命中数恰为 1、无 dsh-sandbox 误报）、混淆特征标注（eval/base64 命中、拼接 URL 保持不可见、初筛声明出现）、GEMINI.md/copilot-instructions/含 prompt 键 settings.json 跟踪 + 无 prompt 键 settings.json 不跟踪。host：`DSH_ALLOWED_HOSTS` 四例（列名通过 2、未列拒绝 2，含相邻 IP 192.168.1.101 拒绝）。
+
 ## [0.7.0] — 2026-08-19
 
 全面项目评审（功能、功能性、功能逻辑）后的修复版：评审指出的全部 10 项问题逐一修复，每项独立通过测试。检测面扩展（传递依赖、安全层补丁），供应链判定与语义一致性纠偏，读取路由增加 DNS rebinding 防线。

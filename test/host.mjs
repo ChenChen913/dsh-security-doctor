@@ -93,6 +93,30 @@ async function main() {
     assert.equal(localOk.code, 200, 'local Host accepted: ' + hostValue)
   }
 
+  // v0.7.1 (feedback #5): DSH_ALLOWED_HOSTS extends the local-only policy for
+  // LAN / reverse-proxy deployments — listed hostnames pass, unlisted ones
+  // (the rebinding attacker) are still rejected. The whitelist is read at
+  // module load, so re-import a cache-busted copy with the env set.
+  process.env.DSH_ALLOWED_HOSTS = '192.168.1.100, my-dsh.internal:3080'
+  try {
+    const modLan = await import(`../lib/index.js?lan=${Date.now()}`)
+    const { ctx: ctxLan, registrations: regsLan } = makeCtx()
+    modLan.apply(ctxLan)
+    const lanByPath = Object.fromEntries(regsLan.map((r) => [r.path, r]))
+    for (const hostValue of ['192.168.1.100:3000', 'my-dsh.internal']) {
+      const lanOk = mockRes()
+      await lanByPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: { ...H, host: hostValue } }, lanOk)
+      assert.equal(lanOk.code, 200, 'DSH_ALLOWED_HOSTS entry accepted: ' + hostValue)
+    }
+    for (const hostValue of ['evil.com:3080', '192.168.1.101:3000']) {
+      const lanBad = mockRes()
+      await lanByPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: { ...H, host: hostValue } }, lanBad)
+      assert.equal(lanBad.code, 403, 'unlisted Host still rejected: ' + hostValue)
+    }
+  } finally {
+    delete process.env.DSH_ALLOWED_HOSTS
+  }
+
   // self-test route: proves host half loaded, reports version
   const resSelf = mockRes()
   await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H }, resSelf)
