@@ -16,6 +16,8 @@
  */
 
 import assert from 'node:assert/strict'
+import nodeHttp from 'node:http'
+import nodeHttps from 'node:https'
 import { apply, name, inject } from '../lib/index.js'
 
 function mockRes() {
@@ -55,15 +57,17 @@ async function main() {
   const { ctx, registrations } = makeCtx()
   const dispose = apply(ctx)
 
-  assert.equal(registrations.length, 2, 'check + self-test routes')
+  assert.equal(registrations.length, 4, 'check + self-test + guard + watch routes')
   const byPath = Object.fromEntries(registrations.map((r) => [r.path, r]))
   assert.equal(byPath['/dsh-security-doctor/check'].kind, 'exact')
   assert.equal(byPath['/dsh-security-doctor/self-test'].kind, 'exact')
+  assert.equal(byPath['/dsh-security-doctor/guard'].kind, 'exact')
+  assert.equal(byPath['/dsh-security-doctor/watch'].kind, 'exact')
 
   // cross-site read guard (self-audit S1): no pairing header → 403;
   // cross-site Sec-Fetch-Site → 403 even with the header
   const H = { 'x-dsh-security-doctor': '1' }
-  for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test']) {
+  for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test', '/dsh-security-doctor/guard', '/dsh-security-doctor/watch']) {
     const noHeader = mockRes()
     await byPath[path].handler({ method: 'GET' }, noHeader)
     assert.equal(noHeader.code, 403, path + ' rejects missing pairing header')
@@ -73,7 +77,7 @@ async function main() {
   }
 
   // method guards (with the pairing header)
-  for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test']) {
+  for (const path of ['/dsh-security-doctor/check', '/dsh-security-doctor/self-test', '/dsh-security-doctor/guard', '/dsh-security-doctor/watch']) {
     const res = mockRes()
     await byPath[path].handler({ method: 'POST', headers: H }, res)
     assert.equal(res.code, 405, path + ' rejects POST')
@@ -115,6 +119,92 @@ async function main() {
     }
   } finally {
     delete process.env.DSH_ALLOWED_HOSTS
+  }
+
+  // ── v1.0.0 guard mode: route protection matrix + toggle + rollback ──
+  const guardRoute = byPath['/dsh-security-doctor/guard']
+  // DNS-rebinding guard covers the new route like every other one
+  {
+    const rebound = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: { ...H, host: 'evil.com:3080' } }, rebound)
+    assert.equal(rebound.code, 403, 'guard route rejects rebound Host')
+    const localOk = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: { ...H, host: '127.0.0.1:3080' } }, localOk)
+    assert.equal(localOk.code, 200, 'guard route accepts local Host')
+  }
+  // default state: OFF, empty ring buffer, best-effort flag for the UI
+  {
+    const res = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: H }, res)
+    assert.equal(res.code, 200)
+    assert.equal(res.headers['cache-control'], 'no-store')
+    const status = JSON.parse(res.body)
+    assert.equal(status.ok, true)
+    assert.equal(status.enabled, false, 'guard hook default OFF')
+    assert.deepEqual(status.records, [])
+    assert.equal(status.bestEffort, true, 'attribution honesty flag exposed')
+    assert.equal(typeof status.limit, 'number')
+  }
+  // invalid ?enable= → 400; valid values toggle the hook; status query is pure
+  {
+    const bad = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/guard?enable=yes' }, bad)
+    assert.equal(bad.code, 400, 'invalid enable value rejected')
+    const realHttpReq = nodeHttp.request
+    const on = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/guard?enable=1' }, on)
+    assert.equal(JSON.parse(on.body).enabled, true, 'enable=1 turns the hook on')
+    assert.notEqual(nodeHttp.request, realHttpReq, 'real http.request is wrapped while enabled')
+    const off = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/guard?enable=0' }, off)
+    assert.equal(JSON.parse(off.body).enabled, false, 'enable=0 turns the hook off')
+    assert.equal(nodeHttp.request, realHttpReq, 'real http.request restored after disable')
+  }
+  // apply()'s own dispose is a second rollback path: enable, dispose, restored
+  {
+    const realHttpsReq = nodeHttps.request
+    const onAgain = mockRes()
+    await guardRoute.handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/guard?enable=1' }, onAgain)
+    assert.notEqual(nodeHttps.request, realHttpsReq, 'https wrapped after re-enable')
+    dispose()
+    assert.equal(nodeHttps.request, realHttpsReq, 'dispose() unwraps the hook (uninstall rollback)')
+  }
+
+  // ── v1.0.0 sentinel /watch: route protection + stateless snapshot shape ──
+  const watchRoute = byPath['/dsh-security-doctor/watch']
+  // DNS-rebinding guard covers the sentinel route like every other one
+  {
+    const rebound = mockRes()
+    await watchRoute.handler({ method: 'GET', headers: { ...H, host: 'evil.com:3080' } }, rebound)
+    assert.equal(rebound.code, 403, 'watch route rejects rebound Host')
+    const localOk = mockRes()
+    await watchRoute.handler({ method: 'GET', headers: { ...H, host: '127.0.0.1:3080' } }, localOk)
+    assert.equal(localOk.code, 200, 'watch route accepts local Host')
+  }
+  // the payload the client's sentinel diff consumes: workspace + files map of
+  // mtimeMs:fingerprint strings (or explicit missing/unreadable markers), the
+  // best-effort honesty flag, and no host-side state between calls
+  {
+    const res = mockRes()
+    await watchRoute.handler({ method: 'GET', headers: H }, res)
+    assert.equal(res.code, 200)
+    assert.equal(res.headers['cache-control'], 'no-store')
+    const snap = JSON.parse(res.body)
+    assert.equal(snap.ok, true)
+    assert.equal(typeof snap.workspace, 'string', 'snapshot names the workspace it watched')
+    assert.equal(snap.bestEffort, true, 'sentinel honesty flag exposed')
+    assert.equal(snap.count, Object.keys(snap.files).length, 'count matches the files map')
+    for (const key of Object.keys(snap.files)) {
+      assert.match(key, /^(home|ws):/, 'display key is namespaced home:/ws: ' + key)
+      const value = snap.files[key]
+      assert.ok(/^\d+:/.test(value) || value === 'missing' || value === 'unreadable',
+        'value is mtimeMs:fingerprint or an explicit marker: ' + key)
+    }
+    // stateless: an immediate second call deep-equals the first (no host
+    // memory — a host restart cannot manufacture a false "everything changed")
+    const res2 = mockRes()
+    await watchRoute.handler({ method: 'GET', headers: H }, res2)
+    assert.deepEqual(JSON.parse(res2.body).files, snap.files, 'watch route keeps no state between calls')
   }
 
   // self-test route: proves host half loaded, reports version
@@ -221,7 +311,6 @@ async function main() {
   assert.equal(services3.severity, 'medium')
   assert.match(services3.detail, /sandbox/)
 
-  dispose()
   console.log('HOST OK — routes:', Object.keys(byPath).join(', '), '| verdict:', payload1.report.verdict)
 }
 

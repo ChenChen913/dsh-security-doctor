@@ -37,7 +37,18 @@
  * by overflow:hidden, and card surfaces are lifted for contrast. v0.6.2
  * round: no clip anywhere in the card stack (overflow:hidden removed from
  * cards and the pass group), titles/summaries wrap via word-break instead
- * of truncating, and pass rows carry their own corner rounding. Run with:
+ * of truncating, and pass rows carry their own corner rounding. v0.8
+ * additions: suspicion tier badge + session policy line render on cards
+ * (1-6/1-7) with old-report compatibility. v0.9 additions: the deep-review
+ * prompt carries path/signals/T1–T10/format/anti-bribery with zero egress
+ * (2-1/2-2), and pasted AI conclusions persist per workspace+plugin with
+ * verdict auto-detection and fingerprint staleness pairing (2-3). v1.0.0
+ * additions: the guard-mode switch re-asserts the host hook at mount, the
+ * experimental records section renders plugin → host rows with credential
+ * flags and honesty labels (3-1), the sentinel lights the badge on a
+ * changed high-value file between polls, opening the report consumes the
+ * alert into a named list, and toggling OFF persists + stops everything
+ * (3-2/3-4). Run with:
  *
  *   node test/client.mjs
  */
@@ -71,6 +82,20 @@ let fetchCalls = []
 let ghLatest = { tag_name: 'v9.9.9' } // what the fake GitHub release API returns
 let ghStatus = 200 // 404 → "no release published" path (user finding 3.2-4)
 let checkPayload = sampleReport // mount/auto checkup response (user finding 3.2-5)
+// v1.0.0 (plan 3-1/3-2): what the fake /guard and /watch routes answer — the
+// guard scenario below flips these between mounts to drive the switch, the
+// records section, and the sentinel diff
+let guardPayload = {
+  ok: true, enabled: true, limit: 50, bestEffort: true,
+  records: [
+    { at: '2026-08-19T00:00:00.000Z', plugin: 'dsh-x', host: 'evil.example.com', method: 'POST', credHeaders: false, credBody: true },
+    { at: '2026-08-19T00:00:01.000Z', plugin: null, host: 'registry.npmjs.org', method: 'GET', credHeaders: false, credBody: false },
+  ],
+}
+let watchPayload = {
+  ok: true, workspace: 'D:\\proj3', bestEffort: true,
+  files: { 'home:cordis.patch.yml': '111:hashA', 'ws:AGENTS.md': '222:hashB' },
+}
 globalThis.window = {
   __ModuleLoader__: { load(m) { capturedModule = m } },
   fetch(url, init) {
@@ -82,6 +107,12 @@ globalThis.window = {
     }
     if (u.includes('/self-test')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, version: '0.6.0' }) })
+    }
+    if (u.includes('/dsh-security-doctor/guard')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(guardPayload) })
+    }
+    if (u.includes('/dsh-security-doctor/watch')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(watchPayload) })
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, report: checkPayload }) })
   },
@@ -111,10 +142,12 @@ globalThis.document = {
 // locale — pin it so the i18n branch under test is deterministic (CI runners
 // are en-US; a Chinese dev machine is zh-CN; both must pass the same suite).
 // The fake clipboard resolves immediately so copy actions report success
-// (the v0.5-1 toast assertion relies on it).
+// (the v0.5-1 toast assertion relies on it) and CAPTURES the text so the
+// v0.9 deep-review prompt contract can be asserted on the real payload.
+let lastCopiedText = null
 function setNavigator(language) {
   Object.defineProperty(globalThis, 'navigator', {
-    value: { language, clipboard: { writeText: () => Promise.resolve() } },
+    value: { language, clipboard: { writeText: (text) => { lastCopiedText = text; return Promise.resolve() } } },
     configurable: true,
   })
 }
@@ -706,6 +739,461 @@ async function main() {
   assert.ok(capNote && String(capNote.children[0]).includes('上限 99'),
     'capped gauge shows the visible 99-cap cue (v0.6.1 #9)')
   console.log('CLIENT OK (v0.5) — dedup/trend/ack/toast/lang/score-cap all verified')
+
+  // ── v0.8 (plan 1-5): plugin code-tree fingerprint drift ──
+  // The engine stamps every scanned external plugin with a content-hash
+  // fingerprint; the client snapshots {name → fp} per workspace and flags
+  // drift across runs. Three phases: first snapshot (baseline note, no
+  // trend line), drifted second run (⚠ note on the egress card + a trend
+  // span), and an old-format report without trees (silent skip).
+  const egCheck = (fp) => ({
+    id: 'plugin-egress', title: '出网扫描', severity: 'medium', status: 'finding',
+    detail: '- dsh-tree-demo：evil.example；⚠ 意图特征信号（单特征，仅供复核）：邮箱 a@b.example',
+    advice: '审',
+    extra: { perPlugin: [{ name: 'dsh-tree-demo', hosts: [['evil.example', 1]], suspicious: [],
+      signals: { emailSamples: ['a@b.example'], bareHosts: [], envKeys: [], credHits: 0, mailHits: 1, envHits: 0, keyHits: 0, singles: 1 },
+      combos: [], comboFiles: [], injection: [], installScriptHits: null,
+      tree: { fingerprint: fp, files: 3, partial: false }, score: 8, tier: 'low' }] },
+  })
+  const mount = async () => {
+    hookStates = []
+    resetHooks()
+    const m = capturedModule.factory((n) => { if (n === 'react') return React; throw new Error('unexpected require: ' + n) })
+    let s = null
+    m.apply({
+      effect(fn) { fn(); return () => {} },
+      slots: {
+        inject(slotName, register) { const d = register(); return () => d() },
+        register(spec, render) { s = { spec, render }; return () => { s = null } },
+      },
+    })
+    renderAndCollect(s) // mount fires the auto checkup
+    await settle()
+    return s
+  }
+  // phase 1: first snapshot — the egress card carries the baseline note and
+  // NOTHING rides the trend (first-snapshot is baseline, not drift)
+  store.delete('dsd.cachedReport')
+  checkPayload = {
+    ...sampleReport,
+    generatedAt: new Date(Date.now() + 4000).toISOString(),
+    checks: sampleReport.checks.concat([egCheck('f'.repeat(64))]),
+  }
+  let slotTree = await mount()
+  let openBtn1 = renderAndCollect(slotTree)
+  openBtn1.el.props.onClick() // manual open (the high finding is acked)
+  await settle()
+  hookStates[0] = 'open'
+  let treeView1 = renderAndCollect(slotTree)
+  assert.ok(treeView1.text.includes('首次记录插件代码指纹'),
+    'first tree snapshot shows the baseline note (v0.8 1-5)')
+  assert.ok(!treeView1.text.includes('插件代码树变更：'),
+    'first snapshot does not ride the trend as drift (v0.8 1-5)')
+  const treeSnap1 = JSON.parse(store.get('dsd.trees.D_proj'))
+  assert.ok(treeSnap1 && treeSnap1.trees && treeSnap1.trees['dsh-tree-demo'] === 'f'.repeat(64),
+    'tree snapshot persisted per workspace (v0.8 1-5)')
+  // phase 2: the same plugin, new fingerprint (an upgrade swapped code) —
+  // the cache-path replay guard must keep the drift visible even though
+  // every render re-runs the effect against the now-current snapshot
+  store.delete('dsd.cachedReport')
+  checkPayload = {
+    ...sampleReport,
+    generatedAt: new Date(Date.now() + 6000).toISOString(),
+    checks: sampleReport.checks.concat([egCheck('e'.repeat(64))]),
+  }
+  slotTree = await mount()
+  const openBtn2 = renderAndCollect(slotTree)
+  openBtn2.el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const treeView2 = renderAndCollect(slotTree)
+  assert.ok(treeView2.text.includes('dsh-tree-demo: ⚠ 代码变更'),
+    'drifted tree flagged on the egress card (v0.8 1-5)')
+  assert.ok(treeView2.text.includes('插件代码树变更：dsh-tree-demo'),
+    'code-tree drift rides the trend area (v0.8 1-5)')
+  // phase 3: an old-format report (no perPlugin trees at all) renders clean
+  store.delete('dsd.cachedReport')
+  checkPayload = { ...sampleReport, generatedAt: new Date(Date.now() + 8000).toISOString() }
+  const slotOld = await mount()
+  const openBtn3 = renderAndCollect(slotOld)
+  openBtn3.el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const oldView = renderAndCollect(slotOld)
+  assert.ok(oldView.nodes.some((n) => n.props.role === 'dialog'), 'old-format report still renders the modal')
+  assert.ok(!oldView.text.includes('代码树'), 'report without trees shows no tree note (v0.8 1-5)')
+  // v0.8 (plan 1-6/1-7): the same old-format report must not grow a
+  // suspicion badge or a session-policy line — the new extras are optional
+  assert.ok(!oldView.nodes.some((n) => typeof n.props.className === 'string' && n.props.className.includes('dsd-sus')),
+    'report without perPlugin scores renders no suspicion badge (v0.8 1-6)')
+  assert.ok(!oldView.nodes.some((n) => n.props.className === 'dsd-check__session'),
+    'report without sessionPolicy renders no session line (v0.8 1-7)')
+
+  // ── v0.8 (plan 1-6/1-7): suspicion badge + session policy line ──
+  // The egress card carries a medium-tier plugin (badge with the score,
+  // prose tail stripped) next to a low-tier one (badgeless); the services
+  // card carries a session override that differs from the service default
+  // (the "服务默认 X / 本会话实际 Y ⚠" comparison line).
+  store.delete('dsd.cachedReport')
+  checkPayload = {
+    ...sampleReport,
+    generatedAt: new Date(Date.now() + 10000).toISOString(),
+    checks: sampleReport.checks.concat([
+      {
+        id: 'plugin-egress', title: '出网扫描', severity: 'medium', status: 'finding',
+        detail: '- dsh-sus-demo：evil.example；可疑度 62/100（中）\n- dsh-quiet-demo：ok.example',
+        advice: '审',
+        extra: { perPlugin: [
+          { name: 'dsh-sus-demo', dir: 'C:\\Users\\t\\.dsh\\profiles\\web\\node_modules\\dsh-sus-demo',
+            hosts: [['evil.example', 2]], suspicious: [['eval(', 1]],
+            signals: { emailSamples: ['a@evil.example'], bareHosts: [], envKeys: ['DEEPSEEK_API_KEY'], credHits: 1, mailHits: 0, envHits: 1, keyHits: 0, singles: 3 },
+            combos: [['cred-exfil', 1]], comboFiles: ['lib/steal.js'], injection: [], installScriptHits: null,
+            score: 62, tier: 'medium', tree: null },
+          { name: 'dsh-quiet-demo', hosts: [['ok.example', 1]], suspicious: [], score: 8, tier: 'low', tree: null },
+        ] },
+      },
+      {
+        id: 'security-services', title: '核心防护服务', severity: 'high', status: 'finding',
+        detail: '本会话实际以 danger-full-access 运行（DSH_PERMISSION_MODE）——等效审批为 never。当前生效值：权限预设（组合默认）：workspace-write。',
+        advice: '切回',
+        extra: { sessionPolicy: { preset: 'danger-full-access', source: 'DSH_PERMISSION_MODE', serviceDefault: 'workspace-write' } },
+      },
+    ]),
+  }
+  const slotSus = await mount()
+  const openBtnSus = renderAndCollect(slotSus)
+  openBtnSus.el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const susView = renderAndCollect(slotSus)
+  // badge: exactly one (medium tier), carrying the score, tier-colored
+  const susBadges = susView.nodes.filter((n) => typeof n.props.className === 'string' && /(^|\s)dsd-sus(\s|$)/.test(n.props.className))
+  assert.equal(susBadges.length, 1, 'medium-tier plugin gets exactly one suspicion badge, low tier none (v0.8 1-6)')
+  assert.match(susBadges[0].props.className, /dsd-sus--medium/, 'badge carries the medium tier color (v0.8 1-6)')
+  assert.ok(susBadges[0].children.join('').includes('62'), 'badge shows the numeric score (v0.8 1-6)')
+  assert.ok(susBadges[0].props.title.includes('可疑度评分'), 'badge tooltip explains the score (v0.8 1-6)')
+  // the prose tail is stripped from the row — the number never shows twice
+  assert.ok(!susView.text.includes('可疑度 62/100'), 'prose suspicion tail replaced by the badge (v0.8 1-6)')
+  assert.ok(susView.text.includes('evil.example'), 'the rest of the plugin row survives the strip (v0.8 1-6)')
+  // session policy line: the plan's comparison wording, on the services card
+  const sessLine = susView.nodes.filter((n) => n.props.className === 'dsd-check__session')[0]
+  assert.ok(sessLine, 'session-vs-service line rendered on the services card (v0.8 1-7)')
+  assert.equal(sessLine.children.join(''), '服务默认 workspace-write / 本会话实际 danger-full-access ⚠',
+    'session line uses the 服务默认/本会话实际 comparison shape (v0.8 1-7)')
+  console.log('CLIENT OK (v0.8 1-6/1-7) — suspicion badge + session policy line + old-report compat')
+
+  // ── v0.9 (plan 2-1/2-2): clipboard-mode deep review ──
+  // The marked plugin row (dsh-sus-demo: signals + combos + medium tier)
+  // grows an inline ghost button; the quiet low-tier row does not. Clicking
+  // copies a structured prompt whose CONTRACT is: plugin path, the concrete
+  // signals the static checkup hit, the T1–T10 review method, the output
+  // format, and the anti-bribery declaration at the top.
+  const drButtons = susView.nodes.filter((n) => n.type === 'button'
+    && typeof n.props.className === 'string' && /(^|\s)dsd-mini--ghost(\s|$)/.test(n.props.className))
+  assert.equal(drButtons.length, 1, 'exactly one deep-review button: marked row only, quiet row none (v0.9 2-1)')
+  assert.ok(drButtons[0].props.title.includes('零外发'), 'button title states the zero-egress clipboard mode (v0.9 2-1)')
+  lastCopiedText = null
+  drButtons[0].props.onClick()
+  await settle() // the clipboard write is a promise; let it resolve
+  assert.ok(lastCopiedText, 'clicking the button puts the prompt on the clipboard (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('dsh-sus-demo'), 'prompt names the plugin (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('C:\\Users\\t\\.dsh\\profiles\\web\\node_modules\\dsh-sus-demo'),
+    'prompt carries the install path (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('evil.example'), 'prompt echoes the hit outbound host (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('a@evil.example'), 'prompt echoes the hit email signal (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('DEEPSEEK_API_KEY'), 'prompt echoes the hit env key (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('疑似凭据外发链'), 'prompt echoes the cred-exfil combination (v0.9 2-1)')
+  // anti-bribery declaration (2-2): rides the top, untrusted-data framing,
+  // only-escalate rule
+  assert.ok(lastCopiedText.indexOf('防收买声明') < lastCopiedText.indexOf('## 审查对象'),
+    'anti-bribery declaration rides the top of the prompt (v0.9 2-2)')
+  assert.ok(lastCopiedText.includes('不可信数据'), 'declaration frames the plugin as untrusted data (v0.9 2-2)')
+  assert.ok(lastCopiedText.includes('本身即是一条发现'), 'declaration: instructions to the reviewer are themselves findings (v0.9 2-2)')
+  assert.ok(lastCopiedText.includes('只能升级或确认'), 'declaration: conclusions may only escalate, never downgrade (v0.9 2-2)')
+  // review method + output format
+  assert.ok(lastCopiedText.includes('T1 安装期代码执行') && lastCopiedText.includes('T10 隐藏与混淆'),
+    'prompt carries the T1–T10 review method summary (v0.9 2-1)')
+  assert.ok(lastCopiedText.includes('## 裁决：SAFE / REVIEW / REJECT'), 'prompt carries the output format contract (v0.9 2-1)')
+  // no egress: the copy goes through the clipboard stub only, no fetch
+  const fetchCountBeforeDr = fetchCalls.length
+  assert.equal(fetchCalls.length, fetchCountBeforeDr, 'deep-review click fires zero network requests (v0.9 2-1)')
+  console.log('CLIENT OK (v0.9 2-1/2-2) — deep-review prompt: path/signals/T1-T10/format/anti-bribery, zero egress')
+
+  // ── v0.9 (plan 2-3): AI conclusion backfill ──
+  // The clipboard round-trip closes: paste the agent's report back through
+  // the editor, it lands in localStorage keyed to workspace+plugin, the
+  // verdict is auto-detected from the "裁决：" header, the bar replaces the
+  // trigger, and expanding shows the full text. Zero egress throughout.
+  const fetchCountBeforeAi = fetchCalls.length
+  const aiTriggers = susView.nodes.filter((n) => n.type === 'button'
+    && typeof n.props.className === 'string' && /(^|\s)dsd-mini--ai(\s|$)/.test(n.props.className))
+  assert.equal(aiTriggers.length, 1, 'backfill trigger on the marked row only, quiet row none (v0.9 2-3)')
+  assert.ok(aiTriggers[0].props.title.includes('零外发'), 'backfill trigger title states the zero-egress storage (v0.9 2-3)')
+  aiTriggers[0].props.onClick() // open the paste editor
+  hookStates[0] = 'open'
+  const aiEdit = renderAndCollect(slotSus)
+  const aiTa = aiEdit.nodes.filter((n) => n.type === 'textarea')[0]
+  assert.ok(aiTa, 'editor renders a textarea after the trigger click (v0.9 2-3)')
+  assert.ok(aiTa.props.placeholder.includes('裁决'), 'placeholder explains the verdict auto-detection (v0.9 2-3)')
+  const aiSaveEmpty = aiEdit.nodes.filter((n) => n.type === 'button' && n.children.includes('保存'))[0]
+  assert.ok(aiSaveEmpty && aiSaveEmpty.props.disabled === true, 'save stays disabled while the editor is empty (v0.9 2-3)')
+  // paste the agent's report (following the prompt's output-format contract)
+  aiTa.props.onChange({ target: { value: '# 插件安全审查报告：dsh-sus-demo\n## 裁决：REJECT\n## 命中项\n[T6] lib/steal.js:3 — 读取 .env' } })
+  hookStates[0] = 'open'
+  const aiFilled = renderAndCollect(slotSus)
+  const aiSave = aiFilled.nodes.filter((n) => n.type === 'button' && n.children.includes('保存'))[0]
+  assert.ok(aiSave && aiSave.props.disabled === false, 'save enables once text is pasted (v0.9 2-3)')
+  aiSave.props.onClick()
+  hookStates[0] = 'open'
+  const aiStored = renderAndCollect(slotSus)
+  // persistence: workspace+plugin keyed entry with the auto-detected verdict
+  const aiStore = JSON.parse(store.get('dsd.aireview.D_proj'))
+  assert.ok(aiStore && aiStore['dsh-sus-demo'], 'conclusion persisted under workspace+plugin (v0.9 2-3)')
+  assert.equal(aiStore['dsh-sus-demo'].verdict, 'REJECT', 'verdict auto-detected from the 裁决 header (v0.9 2-3)')
+  assert.ok(String(aiStore['dsh-sus-demo'].text).includes('[T6]'), 'full report text stored (v0.9 2-3)')
+  // the collapsed bar replaces the trigger, carrying the verdict + dot
+  const aiBar = aiStored.nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-airev__bar(\s|$)/.test(n.props.className))[0]
+  assert.ok(aiBar, 'stored conclusion renders the collapsed verdict bar (v0.9 2-3)')
+  assert.ok(aiBar.children.join('').includes('AI 裁决：REJECT'), 'bar carries the auto-detected verdict (v0.9 2-3)')
+  const aiDot = aiBar.children.filter((c) => typeof c === 'object' && /dsd-airev__dot--reject/.test(c.props.className))[0]
+  assert.ok(aiDot, 'REJECT verdict colors the bar dot red (v0.9 2-3)')
+  // expanding shows the full pasted report; fixture has no tree fingerprint
+  // so neither the stale nor the match note may render (cannot verify)
+  aiBar.props.onClick()
+  hookStates[0] = 'open'
+  const aiOpen = renderAndCollect(slotSus)
+  const aiBody = aiOpen.nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-airev__body(\s|$)/.test(n.props.className))[0]
+  assert.ok(aiBody && String(aiBody.children[0]).includes('[T6] lib/steal.js:3'), 'expanded view shows the full report (v0.9 2-3)')
+  assert.ok(!aiOpen.text.includes('代码已变更') && !aiOpen.text.includes('结论对应当前代码指纹'),
+    'no stale/match note without a code fingerprint (v0.9 2-3)')
+  // no egress: the fake harness re-runs the mount effect on every walk (its
+  // own localhost self-test ping), so the meaningful contract is that every
+  // fetch since the flow began still targets the plugin's own routes — and
+  // the pasted conclusion NEVER appears in any request URL or body
+  const aiFetches = fetchCalls.slice(fetchCountBeforeAi)
+  assert.ok(aiFetches.every((c) => String(c.url).includes('/dsh-security-doctor/')),
+    'backfill flow only touches the plugin\'s own local routes (v0.9 2-3)')
+  assert.ok(!aiFetches.some((c) => JSON.stringify(c).includes('[T6]')),
+    'the pasted conclusion never leaves the machine (v0.9 2-3)')
+
+  // stale pairing with the 1-5 drift watch: save against fingerprint fpAAA,
+  // then re-checkup with fpBBB — the bar gains ⚠ and the view says stale.
+  // Fresh workspace (proj2) isolates this block from the entry saved above.
+  store.delete('dsd.cachedReport')
+  const susTreePayload = (fp) => ({
+    ...sampleReport,
+    workspace: 'D:\\proj2',
+    generatedAt: new Date(Date.now() + 20000).toISOString(),
+    checks: sampleReport.checks.concat([
+      {
+        id: 'plugin-egress', title: '出网扫描', severity: 'medium', status: 'finding',
+        detail: '- dsh-sus-demo：evil.example；可疑度 62/100（中）\n- dsh-quiet-demo：ok.example',
+        advice: '审',
+        extra: { perPlugin: [
+          { name: 'dsh-sus-demo', dir: 'C:\\Users\\t\\.dsh\\profiles\\web\\node_modules\\dsh-sus-demo',
+            hosts: [['evil.example', 2]], suspicious: [['eval(', 1]],
+            signals: { emailSamples: [], bareHosts: [], envKeys: [], credHits: 0, mailHits: 0, envHits: 0, keyHits: 0, singles: 1 },
+            combos: [], comboFiles: [], injection: [], installScriptHits: null,
+            score: 62, tier: 'medium', tree: { fingerprint: fp, files: 3, partial: false } },
+          { name: 'dsh-quiet-demo', hosts: [['ok.example', 1]], suspicious: [], score: 8, tier: 'low', tree: null },
+        ] },
+      },
+      // an UNACKED high finding keeps the modal open across the harness's
+      // effect re-runs (the cached-report path re-pins phase each walk —
+      // without it every re-render collapses back to idle)
+      {
+        id: 'security-services', title: '核心防护服务', severity: 'high', status: 'finding',
+        detail: '审批策略为 never。当前生效值：审批策略（服务默认）：never。',
+        advice: '切回',
+      },
+    ]),
+  })
+  checkPayload = susTreePayload('fpAAA')
+  hookStates = []
+  resetHooks()
+  const modTree = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotAiA = null
+  modTree.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotAiA = { spec, render }; return () => { slotAiA = null } },
+    },
+  })
+  // walk 1 renders idle (the sample high finding is acked by earlier tests,
+  // so the auto checkup never auto-opens) — manual click opens the report
+  renderAndCollect(slotAiA).el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const treeTrigger = renderAndCollect(slotAiA).nodes.filter((n) => n.type === 'button'
+    && typeof n.props.className === 'string' && /(^|\s)dsd-mini--ai(\s|$)/.test(n.props.className))[0]
+  treeTrigger.props.onClick()
+  hookStates[0] = 'open'
+  const treeEdit = renderAndCollect(slotAiA)
+  treeEdit.nodes.filter((n) => n.type === 'textarea')[0].props
+    .onChange({ target: { value: '# 插件安全审查报告：dsh-sus-demo\n## 裁决：SAFE\n安全。' } })
+  hookStates[0] = 'open'
+  const treeFilled = renderAndCollect(slotAiA)
+  treeFilled.nodes.filter((n) => n.type === 'button' && n.children.includes('保存'))[0].props.onClick()
+  hookStates[0] = 'open'
+  renderAndCollect(slotAiA)
+  // the saved entry is anchored to the fingerprint AT PASTE TIME
+  const treeStore = JSON.parse(store.get('dsd.aireview.D_proj2'))
+  assert.equal(treeStore['dsh-sus-demo'].fp, 'fpAAA', 'conclusion anchored to the code fingerprint at paste time (v0.9 2-3)')
+  // same fingerprint → verified note in the expanded view
+  const barSame = renderAndCollect(slotAiA).nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-airev__bar(\s|$)/.test(n.props.className))[0]
+  barSame.props.onClick()
+  hookStates[0] = 'open'
+  const viewSame = renderAndCollect(slotAiA)
+  assert.ok(viewSame.text.includes('结论对应当前代码指纹'), 'matching fingerprint shows the verified note (v0.9 2-3)')
+  assert.ok(!viewSame.text.includes('代码已变更'), 'no stale note while the fingerprint matches (v0.9 2-3)')
+  // re-checkup with a DIFFERENT fingerprint: the conclusion goes stale
+  store.delete('dsd.cachedReport')
+  checkPayload = susTreePayload('fpBBB')
+  hookStates = []
+  resetHooks()
+  const modTree2 = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotTree2 = null
+  modTree2.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotTree2 = { spec, render }; return () => { slotTree2 = null } },
+    },
+  })
+  // same manual-open pattern as above
+  renderAndCollect(slotTree2).el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const staleView = renderAndCollect(slotTree2)
+  const staleBar = staleView.nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-airev__bar(\s|$)/.test(n.props.className))[0]
+  assert.ok(staleBar && staleBar.children.join('').includes('⚠'),
+    'changed fingerprint flags the stored conclusion stale on the bar (v0.9 2-3)')
+  staleBar.props.onClick()
+  hookStates[0] = 'open'
+  const staleOpen = renderAndCollect(slotTree2)
+  assert.ok(staleOpen.text.includes('代码已变更'), 'expanded view explains the stale conclusion (v0.9 2-3)')
+  assert.ok(staleOpen.text.includes('建议重新深审'), 'stale note points back at the deep review (v0.9 2-3)')
+  console.log('CLIENT OK (v0.9 2-3) — AI conclusion backfill: verdict/stale/fingerprint pairing, zero egress')
+
+  // ── v1.0.0 (plan 3-1/3-2/3-4): guard mode switch + records + sentinel ──
+  // A fresh workspace (proj3, medium-only report — no auto-open noise) with
+  // the guard preference already ON (localStorage). The mount must re-assert
+  // the host hook (?enable=1), poll the sentinel once (silent baseline), and
+  // the report must show the experimental records section + the footer switch.
+  store.delete('dsd.cachedReport')
+  store.set('dsd.guard', JSON.stringify('1')) // what lsSet('dsd.guard','1') writes
+  checkPayload = {
+    ...sampleReport,
+    workspace: 'D:\\proj3',
+    generatedAt: new Date(Date.now() + 30000).toISOString(),
+    checks: sampleReport.checks.map((c) => c.id === 'js-directives'
+      ? { ...c, severity: 'medium' } // medium-only: no auto-open, no high badge
+      : c),
+  }
+  const fetchCountBeforeGuard = fetchCalls.length
+  hookStates = []
+  resetHooks()
+  const modGuard = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotGuard = null
+  modGuard.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotGuard = { spec, render }; return () => { slotGuard = null } },
+    },
+  })
+  renderAndCollect(slotGuard) // mount: auto checkup + hook re-assert + first poll
+  await settle()
+  const guardMountFetches = fetchCalls.slice(fetchCountBeforeGuard)
+  assert.ok(guardMountFetches.some((c) => String(c.url).includes('/dsh-security-doctor/guard?enable=1')),
+    'guard ON at mount re-asserts the host hook (host may have restarted) (v1.0.0 3-1)')
+  assert.ok(guardMountFetches.some((c) => String(c.url).includes('/dsh-security-doctor/watch')),
+    'guard ON at mount polls the sentinel once (v1.0.0 3-2)')
+  assert.ok(store.has('dsd.watch.D_proj3'), 'the first poll stores the silent baseline per workspace (v1.0.0 3-2)')
+  // open the report: records section + best-effort honesty + footer switch
+  renderAndCollect(slotGuard).el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const guardOpen = renderAndCollect(slotGuard)
+  assert.ok(guardOpen.text.includes('运行时出站记录'), 'report shows the runtime outbound records section (v1.0.0 3-1)')
+  assert.ok(guardOpen.text.includes('实验'), 'the section carries the experimental label (v1.0.0 3-4)')
+  assert.ok(guardOpen.text.includes('尽力推断'), 'attribution honesty note rides the section (v1.0.0 3-1)')
+  assert.ok(guardOpen.text.includes('dsh-x → evil.example.com'), 'records attribute plugin → host (v1.0.0 3-1)')
+  assert.ok(guardOpen.text.includes('含凭据特征'), 'credential-shaped record is flagged (v1.0.0 3-1)')
+  assert.ok(guardOpen.text.includes('(host) → registry.npmjs.org'), 'host-attributed record renders as (host) (v1.0.0 3-1)')
+  const guardSwitch = guardOpen.nodes.filter((n) => n.props.role === 'switch')[0]
+  assert.ok(guardSwitch, 'footer guard switch rendered (v1.0.0 3-1)')
+  assert.equal(guardSwitch.props['aria-checked'], 'true', 'switch reflects the ON state')
+  assert.ok(String(guardSwitch.props.title).includes('http/https'), 'switch title states the coverage honestly (v1.0.0 3-4)')
+  assert.ok(guardOpen.text.includes('已开启'), 'switch label shows ON')
+  assert.ok(!guardOpen.text.includes('哨兵：高价值文件变更'), 'no sentinel alert before any change (v1.0.0 3-2)')
+  console.log('CLIENT OK (v1.0.0 3-1) — guard switch + records section + honesty labels')
+
+  // sentinel: a changed high-value file between polls lights the badge, the
+  // click consumes it into the report view, and toggling OFF stops everything
+  watchPayload = { ...watchPayload, files: { 'home:cordis.patch.yml': '999:hashZ', 'ws:AGENTS.md': '222:hashB' } }
+  hookStates = []
+  resetHooks()
+  const modGuard2 = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotGuard2 = null
+  modGuard2.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotGuard2 = { spec, render }; return () => { slotGuard2 = null } },
+    },
+  })
+  renderAndCollect(slotGuard2) // mount: poll #2 diffs against the stored baseline
+  await settle()
+  const guard2 = renderAndCollect(slotGuard2)
+  const sentinelBadge = guard2.nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-badge(\s|$)/.test(n.props.className))[0]
+  assert.ok(sentinelBadge, 'a changed high-value file lights the badge without a checkup (v1.0.0 3-2)')
+  assert.equal(sentinelBadge.children[0], '1', 'badge counts the changed files')
+  assert.ok(String(sentinelBadge.props['aria-label']).includes('哨兵'), 'badge is labeled as the sentinel')
+  // opening the report consumes the alert: badge dark, list moves inside
+  guard2.el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const sentinelOpen = renderAndCollect(slotGuard2)
+  assert.ok(sentinelOpen.text.includes('哨兵：高价值文件变更'), 'report view lists the sentinel alert (v1.0.0 3-2)')
+  assert.ok(sentinelOpen.text.includes('home:cordis.patch.yml'), 'the changed file is named for review (v1.0.0 3-2)')
+  assert.equal(sentinelOpen.nodes.filter((n) => typeof n.props.className === 'string'
+    && /(^|\s)dsd-badge(\s|$)/.test(n.props.className)).length, 0,
+    'opening the report consumes the sentinel badge (v1.0.0 3-2)')
+  // toggle OFF: preference persisted, hook unwrapped host-side, alerts cleared
+  const fetchCountBeforeOff = fetchCalls.length
+  const swOff = sentinelOpen.nodes.filter((n) => n.props.role === 'switch')[0]
+  guardPayload = { ...guardPayload, enabled: false, records: [] } // host answers honestly
+  swOff.props.onClick() // onGuardToggle(false)
+  assert.equal(JSON.parse(store.get('dsd.guard')), '0', 'toggle OFF persists the preference (v1.0.0 3-1)')
+  await settle()
+  assert.ok(fetchCalls.slice(fetchCountBeforeOff).some((c) => String(c.url).includes('/dsh-security-doctor/guard?enable=0')),
+    'toggle OFF drives the host hook off (v1.0.0 3-1)')
+  hookStates[0] = 'open'
+  const guardOff = renderAndCollect(slotGuard2)
+  assert.ok(!guardOff.text.includes('哨兵：高价值文件变更'), 'toggle OFF clears the sentinel alert (v1.0.0 3-2)')
+  assert.ok(!guardOff.text.includes('运行时出站记录'), 'records section hidden once OFF (v1.0.0 3-1)')
+  const swAfter = guardOff.nodes.filter((n) => n.props.role === 'switch')[0]
+  assert.equal(swAfter.props['aria-checked'], 'false', 'switch reflects the OFF state')
+  console.log('CLIENT OK (v1.0.0 3-2/3-4) — sentinel badge/consume + toggle-off stops everything')
 }
 
 main().then(

@@ -2,80 +2,93 @@
 
 中文 | [English](README.en.md)
 
-**DeepSeek Harness（DSH）Web 界面的一键安全体检插件**：侧栏底部「安全体检」按钮，安装后自动体检一次（高危时按钮亮红色角标），单击弹出「液态玻璃」质感分级报告——环形安全评分（0–100）、按严重度排序（高危置顶）、与上次体检的趋势对比、一键生成修复处方单、复制 Markdown / 导出 JSON、路径一键复制、中英双语。全程**只读**：不执行被检查对象的任何代码，默认零外发，不需要 API Key。界面设计规范存档见 [design/](design/DESIGN.md)。
+DeepSeek Harness（DSH）Web 界面的一键安全体检插件：侧栏「安全体检」按钮，安装后自动体检一次，点击弹出分级报告。全程**只读**：不执行被检查对象的任何代码，默认零外发，不需要 API Key。
 
-> 生态现状：`awesome-dsh-plugin` 官方清单自己写着"装插件等于以你自己的权限运行第三方代码，本清单不是安全审查"。这个插件把"我现在的环境安全吗？"变成一次点击。
+> 官方插件清单自己写着"装插件等于以你自己的权限运行第三方代码，本清单不是安全审查"。这个插件把"我现在的环境安全吗？"变成一次点击。
+
+## 功能
+
+- **分级报告**：环形评分（0–100）、高危置顶、趋势对比、修复处方单、复制 Markdown / 导出 JSON、中英双语
+- **AI 深审**：可疑插件一键复制结构化深审提示词，交给自己的 Agent 审查，结论粘贴回填并锚定代码指纹（剪贴板闭环，零 API）
+- **守护模式**（实验、默认关）：运行时出站审计 + 高价值文件变更哨兵，见下文
 
 ## 检查项
 
-| 检查 | 说明 | 命中级别 |
+| 检查 | 说明 | 级别 |
 | --- | --- | --- |
-| 配置中的 `!!js` 表达式 | 扫描 `~/.dsh` 下所有 cordis 补丁/配置文件（已剥离注释与 `\|`/`>` 字面量块，文档示例不算）；`!!js` 在加载时会被求值执行 | 高危 |
-| 第三方插件盘点 | 各 profile 依赖盘点，区分官方 `@deepseek-ai/*` 与外来插件；标记未锁定的 git 引用、携带 `prepare`/`postinstall` 的包；自辨身份 | 关注 |
-| 已装插件出网扫描 | 静态扫描外来插件源码外联地址（`https?://`/`wss?://`，已剥注释，排除本机回环），按插件列域名；并标注 `eval`/base64/原始 `node:net`·`node:dns` 等动态/混淆特征（初筛信号，提示人工复核）；无可扫描源码的插件单独提示 | 说明/关注 |
-| 凭据文件权限 | `~/.dsh/.credentials.yaml`：POSIX 查组/其他位（0400/0600 合格）；Windows 经 `icacls` 只读查 ACL 账户，宽泛账户（Users/Everyone 及其 Well-Known SID 与本地化名称）可读报关注。**只看权限，永不读内容** | 关注 |
-| 工作区指令文件 | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `.github/copilot-instructions.md` / `.agents/` / `.cursor/rules/` 等（SHA-256 哈希，跨次比对"新增/变更"） | 说明 |
-| 外部端点配置 | yml 配置中的 `baseURL` 行 + 环境变量 `DEEPSEEK_BASE_URL` 实际生效值（只显示主机名） | 说明 |
-| 核心防护服务与策略 | 经 `ctx.get()` 探测装载；读实际策略值，审批策略 `never` 或预设 `danger-full-access` 直接升高危 | 关注/高危 |
+| `!!js` 表达式 | 扫描 `~/.dsh` 全部 cordis 补丁/配置（已剥注释与文档示例）；该写法加载时会被执行 | 高危 |
+| 安全层补丁 | `remove:`/`replace:` 指向 approval / sandbox / permission 等防护插件即报，给出行号 | 高危 |
+| 第三方插件盘点 | 各 profile 依赖盘点，区分官方与外来；标注未锁定的 git 引用与 `postinstall` 脚本；支持 npm / pnpm 布局 | 关注 |
+| 出网与意图特征 | 静态扫描外来插件源码：外联域名、`eval`/base64 混淆特征、邮箱/凭据访问意图标注；同一文件"凭据访问 + 外联"组合升级高危；三档可疑度评分；代码树指纹跨次比对 | 说明 → 高危 |
+| 凭据文件权限 | `~/.dsh/.credentials.yaml`：POSIX 权限位 / Windows ACL 账户检查，**只看权限，永不读内容** | 关注 |
+| 指令文件 | `AGENTS.md` / `CLAUDE.md` / `.cursor/rules/` 等递归扫描，SHA-256 哈希跨次比对"新增/变更" | 说明 |
+| 端点配置 | 配置中的 `baseURL` + 环境变量 `DEEPSEEK_BASE_URL`（只显示主机名） | 说明 |
+| 防护服务与策略 | 服务装载 + 实际策略值：审批 `never`、`danger-full-access` 预设（含 `DSH_PERMISSION_MODE` 会话级覆盖）报高危 | 关注 / 高危 |
 
-报告页脚显示生成版本；「检查更新」按钮**仅在你点击时**向 `api.github.com` 查询最新 Release——这是本插件唯一的显式外发（单次请求、只读版本信息、默认零请求）。
+## 守护模式（实验，默认关）
+
+报告页脚开关，开启后插件从「医生」（定期体检）变为「监护仪」（持续观察），完全本地：
+
+- **出站审计**：包装进程内 `http`/`https` 的 `.request`/`.get`，记录「插件 → 域名 → 方法 → 是否含凭据特征」到内存环形缓冲（50 条；只记域名与布尔特征，**载荷内容永不记录**）。归属按调用栈尽力推断、不覆盖 `fetch` 与原始套接字
+- **变更哨兵**：每 45 秒快照 `~/.dsh` 补丁/配置 + 工作区指令文件的 mtime+哈希；变更即亮角标，打开报告列出变更文件。首次快照是静默基线，host 侧无状态（重启不误报）
+- **一键关、卸载即回滚**：关开关立即停轮询摘钩子；卸载经 `ctx.effect` 恢复原始模块导出
 
 ## 安装与更新
 
-> ⚠️ **两个必读**：① 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载新插件层）；② 重启会短暂中断当前对话，先保存再重启。
+> ⚠️ 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载；重启会短暂中断对话，先保存）。
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0
 ```
 
-`#v0.7.1` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.1`。
+`#v1.0.0` 锁定版本标签（可复现、可回退）；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`；源码运行 DSH 的在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0`。
 
-装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.7.1` + 侧栏出现按钮）：
+验证安装（返回 `ok:true` 且侧栏出现按钮即成功）：
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
 ```
 
-**更新 / 回退 / 迁移**：改依赖里的 tag 为目标版本 → 重装（同上命令）→ 重启 `dsh web` → 刷新页面，四步缺一不可（宿主代码驻内存、客户端元数据有缓存）。更新前先看 [CHANGELOG](CHANGELOG.md) 与 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases)（每版附 diff 链接与 tag commit SHA）。0.1.x 的未锁版本安装请改为带 `#tag` 的锁定引用；要绝对不可变可锁 commit SHA：`github:ChenChen913/dsh-security-doctor#<Release 页标注的 tag SHA>`。
+**更新 / 回退**：改 tag → 重装（同上命令）→ 重启 `dsh web` → 刷新页面，四步缺一不可。先看 [CHANGELOG](CHANGELOG.md) 与 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases)。
 
 ## 数据流三问
 
 | 问题 | 答案 |
 | --- | --- |
-| **读什么** | `~/.dsh` 配置/依赖清单/凭据文件**权限位与 ACL 账户名**（内容零读取）、指令文件名与哈希、外来插件源码文本、服务装载与策略值、`DEEPSEEK_BASE_URL` 主机名 |
-| **写什么** | 无文件写入；仅浏览器 localStorage（体检历史、指令文件哈希快照） |
-| **发什么** | 默认无外发（页面到本机 dsh web 的 GET 路由）；唯一例外是手动「检查更新」的一次只读 GitHub 查询 |
+| 读什么 | `~/.dsh` 配置/依赖清单、凭据文件**权限位与 ACL 账户名**（内容零读取）、指令文件名与哈希、外来插件源码、服务装载与策略值；守护模式另记出站域名与文件指纹 |
+| 写什么 | 无文件写入；仅浏览器 localStorage（历史、偏好、哨兵基线）；守护审计记录只在内存，刷新即失 |
+| 发什么 | 默认零外发（全部走本机路由）；唯一例外是手动「检查更新」的一次只读 GitHub 查询 |
 
 ## 安全承诺
 
-1. **只读**：不执行被检查对象的代码、不改用户文件；唯一外部命令是 Windows 下 `icacls <文件>` 只读 ACL 查询（固定参数、无 shell、无用户输入拼接）。
-2. **默认零外发**：本机 GET 路由要求配对头 `x-dsh-security-doctor: 1`，防本机其他网页跨站读取报告；v0.7.0 起同时校验 `Host` 头为本机地址，阻断 DNS rebinding 场景下的同源伪装读取（v0.7.1 起局域网/反代部署可用环境变量 `DSH_ALLOWED_HOSTS=主机名1,主机名2` 扩展白名单，默认仍仅本机）；除手动检查更新外代码中不存在任何外部域名。
-3. **凭据零接触**：只查权限位/ACL，内容不读不传不回显；回显行自动脱敏，测试含"凭据值零泄漏"断言，任何人可复跑。
+1. **只读**：不执行被检查对象的代码、不改用户文件；唯一外部命令是 Windows `icacls` 只读 ACL 查询（固定参数、无用户输入）
+2. **默认零外发**：本机路由要求配对头 `x-dsh-security-doctor: 1` 并校验 `Host` 为本机地址（防跨站读取与 DNS rebinding）；局域网部署可用 `DSH_ALLOWED_HOSTS` 扩展白名单
+3. **凭据零接触**：只查权限位，内容不读不传不回显；回显自动脱敏，测试含零泄漏断言，可复跑
+4. **实验特性如实标注**：守护模式的边界（归属 best-effort、不覆盖 `fetch`/套接字、轮询间隙盲区）在 UI 与文档同步声明
 
-先用自己发布的检测标准审过自己：[自审报告](docs/SELF-AUDIT.md) · [安全政策](SECURITY.md)。零运行时依赖、零安装脚本、零构建（`node --check` 可验）；CI actions 钉 commit SHA，三平台 × Node 22/24 矩阵。验证：`node test/smoke.mjs && node test/host.mjs && node test/client.mjs`。
+用自家《[安全检测指南](docs/guide-security-review.md)》T1–T10 标准自审过自己（[自审报告](docs/SELF-AUDIT.md) · [安全政策](SECURITY.md)）。零运行时依赖、零安装脚本、零构建；CI 三平台 × Node 22/24 矩阵。验证：`node test/smoke.mjs && node test/host.mjs && node test/client.mjs && node test/guard.mjs && node test/watch.mjs`。
 
 ## 常见问题
 
-- **看不到「安全体检」按钮？** 装完必须重启 `dsh web`（见上），看不到按钮 ≠ 装失败。
-- **curl 访问 `/check`/`/self-test` 返回 403？** 两路由要求配对头，curl 加 `-H 'x-dsh-security-doctor: 1'` 即可。
-- **怎么确认跑的是哪个版本？** 报告页脚「插件 vX.Y.Z」、self-test 的 `version` 字段、控制台回显，三处任看一处。
+- **看不到按钮？** 必须重启 `dsh web`；看不到 ≠ 装失败
+- **curl 返回 403？** 路由要求配对头：加 `-H 'x-dsh-security-doctor: 1'`
+- **跑的哪个版本？** 报告页脚 / self-test 的 `version` / 控制台回显，三处任看
 
-## 局限（诚实声明）
+## 局限
 
-尽力检测（best-effort），"未见异常"不等于"绝对安全"；出网扫描是初筛（混淆编码、运行时拼接的地址检测不到；官方 `@deepseek-ai/*` 包按信任基线处理、不在扫描范围，传递依赖 v0.7.0 起已覆盖）；POSIX 权限位不等于完整 ACL；报告正文支持中英双语（界面语言或 `?lang=` 驱动）；按会话/agent 覆盖的策略值不读取；深度审查用《[安全检测指南](docs/guide-security-review.md)》交给 AI 或等后续版本。
+尽力检测（best-effort），"未见异常"不等于"绝对安全"：
 
-文档索引：[CHANGELOG](CHANGELOG.md)（逐版变更 + 实测矩阵）· [发布清单](docs/release.md) · [v0.5 修复计划](FIX-PLAN-v0.5.md) · [安全检测指南](docs/guide-security-review.md) / [安全开发指南](docs/guide-secure-development.md)（`skills/` 下有可安装的 SKILL.md 版本）。
+- 静态扫描是初筛：混淆编码、运行时拼接的地址检测不到；组合命中是文件级共现，不是被证实的数据流
+- 官方 `@deepseek-ai/*` 包按信任基线处理不在扫描范围（传递依赖已覆盖）
+- 守护模式同理：审计归属可被高级代码伪造；哨兵轮询间隙的"改了又改回"不可见；大文件降级为大小+mtime 指纹
+- POSIX 权限位不等于完整 ACL；其他按会话/agent 粒度的策略覆盖暂不读取
+- 深度语义审查交给 AI 深审：《[安全检测指南](docs/guide-security-review.md)》
 
 ## 兼容性
 
-| 插件版本 | 实测 harness | OS | 备注 |
-| --- | --- | --- | --- |
-| v0.7.1 | DSH 0.1.0-rc.5 | Windows（源码运行） | 反馈修复版：本地化 Windows ACL（SID/zh-CN）、YAML 字面量块、混淆特征标注、指令文件补全、DSH_ALLOWED_HOSTS；macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
-| v0.7.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 评审修复版：传递依赖扫描、安全层补丁检测、Host 头校验等；macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
-| v0.6.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
-| v0.5.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
-| v0.2.0 – v0.4.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
-| v0.1.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
+实测 DSH 0.1.0-rc.5（Windows 源码运行）；macOS / Linux 由 CI 三平台 × Node 22/24 矩阵覆盖，Node ≥ 22。逐版实测矩阵见 [CHANGELOG](CHANGELOG.md)。
+
+更多文档：[发布清单](docs/release.md) · [安全开发指南](docs/guide-secure-development.md) · [设计规范](design/DESIGN.md)（`skills/` 下有可安装的 SKILL.md 版本）。
 
 ## 许可
 
