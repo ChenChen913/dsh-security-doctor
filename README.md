@@ -25,12 +25,12 @@
 > ⚠️ **两个必读**：① 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载新插件层）；② 重启会短暂中断当前对话，先保存再重启。
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0
 ```
 
-`#v0.6.0` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`。
+`#v0.7.0` 锁定版本标签（可复现、可回退；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`）。源码 checkout 运行的 DSH：在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`，或 `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`。
 
-装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.6.0` + 侧栏出现按钮）：
+装没装上一条命令确认（curl 返回 `ok:true` + 控制台出现 `[dsh-security-doctor] client loaded; host self-test: v0.7.0` + 侧栏出现按钮）：
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
@@ -49,7 +49,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 ## 安全承诺
 
 1. **只读**：不执行被检查对象的代码、不改用户文件；唯一外部命令是 Windows 下 `icacls <文件>` 只读 ACL 查询（固定参数、无 shell、无用户输入拼接）。
-2. **默认零外发**：本机 GET 路由要求配对头 `x-dsh-security-doctor: 1`，防本机其他网页跨站读取报告；除手动检查更新外代码中不存在任何外部域名。
+2. **默认零外发**：本机 GET 路由要求配对头 `x-dsh-security-doctor: 1`，防本机其他网页跨站读取报告；v0.7.0 起同时校验 `Host` 头为本机地址，阻断 DNS rebinding 场景下的同源伪装读取；除手动检查更新外代码中不存在任何外部域名。
 3. **凭据零接触**：只查权限位/ACL，内容不读不传不回显；回显行自动脱敏，测试含"凭据值零泄漏"断言，任何人可复跑。
 
 先用自己发布的检测标准审过自己：[自审报告](docs/SELF-AUDIT.md) · [安全政策](SECURITY.md)。零运行时依赖、零安装脚本、零构建（`node --check` 可验）；CI actions 钉 commit SHA，三平台 × Node 22/24 矩阵。验证：`node test/smoke.mjs && node test/host.mjs && node test/client.mjs`。
@@ -62,7 +62,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 
 ## 局限（诚实声明）
 
-尽力检测（best-effort），"未见异常"不等于"绝对安全"；出网扫描是初筛（混淆编码、运行时拼接的地址检测不到）；POSIX 权限位不等于完整 ACL；报告正文当前为中文；按会话/agent 覆盖的策略值不读取；深度审查用《[安全检测指南](docs/guide-security-review.md)》交给 AI 或等后续版本。
+尽力检测（best-effort），"未见异常"不等于"绝对安全"；出网扫描是初筛（混淆编码、运行时拼接的地址检测不到；官方 `@deepseek-ai/*` 包按信任基线处理、不在扫描范围，传递依赖 v0.7.0 起已覆盖）；POSIX 权限位不等于完整 ACL；报告正文支持中英双语（界面语言或 `?lang=` 驱动）；按会话/agent 覆盖的策略值不读取；深度审查用《[安全检测指南](docs/guide-security-review.md)》交给 AI 或等后续版本。
 
 文档索引：[CHANGELOG](CHANGELOG.md)（逐版变更 + 实测矩阵）· [发布清单](docs/release.md) · [v0.5 修复计划](FIX-PLAN-v0.5.md) · [安全检测指南](docs/guide-security-review.md) / [安全开发指南](docs/guide-secure-development.md)（`skills/` 下有可安装的 SKILL.md 版本）。
 
@@ -70,6 +70,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 
 | 插件版本 | 实测 harness | OS | 备注 |
 | --- | --- | --- | --- |
+| v0.7.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 评审修复版：传递依赖扫描、安全层补丁检测、Host 头校验等；macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
 | v0.6.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | macOS/Linux 由 CI 矩阵覆盖；Node ≥ 22 |
 | v0.5.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |
 | v0.2.0 – v0.4.0 | DSH 0.1.0-rc.5 | Windows（源码运行） | 同上 |

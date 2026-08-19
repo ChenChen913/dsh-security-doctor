@@ -25,7 +25,7 @@
 
 | # | 发现 | 风险 | 修复 | 验证 |
 | --- | --- | --- | --- | --- |
-| S1 | `/check` 与 `/self-test` 继承了 dsh web 路由的既有信任域（回环无鉴权，同类问题在 DSH 审计中为 F-001）。本机其他网页可跨站读取体检报告（插件清单、配置行、ACL 账户名属低敏感但不必暴露） | 中 | 双路由要求配对头 `x-dsh-security-doctor: 1`：跨站页面无法附加自定义头（需 CORS 预检，本服务永不授予）；同时拒绝 `Sec-Fetch-Site: cross-site`。curl 自检命令在 README 同步更新 | host 测试：无头 → 403；`cross-site` → 403；带头 → 200。client 测试：每次 fetch 均带头 |
+| S1 | `/check` 与 `/self-test` 继承了 dsh web 路由的既有信任域（回环无鉴权，同类问题在 DSH 审计中为 F-001）。本机其他网页可跨站读取体检报告（插件清单、配置行、ACL 账户名属低敏感但不必暴露） | 中 | 双路由要求配对头 `x-dsh-security-doctor: 1`：跨站页面无法附加自定义头（需 CORS 预检，本服务永不授予）；同时拒绝 `Sec-Fetch-Site: cross-site`。curl 自检命令在 README 同步更新。**v0.7.0 加固**：DNS rebinding 下攻击页对自己域名发起的"同源"请求可携带任意自定义头（浏览器不预检），配对头会被绕过——现要求 `Host` 头为本机地址（localhost / 127.x / ::1 / 0.0.0.0），rebound 请求的 Host 仍是攻击者域名，正好被拦；无 Host 头的 HTTP/1.0 工具调用不受影响 | host 测试：无头 → 403；`cross-site` → 403；带头 → 200；带头但 `Host: evil.com` → 403；`Host: 127.0.0.1 / localhost / [::1]` → 200。client 测试：每次 fetch 均带头 |
 | S2 | 回显的配置行若含 `https://user:pass@host` 或 `?key=...` 会把凭据带进报告/复制内容 | 中 | 新增 `maskSecrets()`：遮蔽 URL userinfo、常见 query 凭据参数、`sk-`/`gh?_` 令牌；应用于 `!!js` 行与 baseURL 行回显 | smoke 测试：`hunter2secret` 与 query key 不出现在输出，主机名仍显示；`maskSecrets` 单元断言 |
 | S3 | CI 用 `actions/checkout@v4` 等可变 tag——对安全工具不可接受（tag 可被移动） | 低 | 两个 action 钉到 commit SHA（注释标版本） | workflow 文件审查；每次推送 CI 复跑 |
 

@@ -79,6 +79,20 @@ async function main() {
     assert.equal(res.code, 405, path + ' rejects POST')
   }
 
+  // v0.7 (review #9): DNS-rebinding guard — a same-origin-looking request
+  // whose Host header names a NON-local origin (the rebinding signature) is
+  // rejected even with the pairing header; local hostnames still pass
+  for (const hostValue of ['evil.com:3080', 'rebind.example']) {
+    const rebound = mockRes()
+    await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: { ...H, host: hostValue } }, rebound)
+    assert.equal(rebound.code, 403, 'rebound Host rejected: ' + hostValue)
+  }
+  for (const hostValue of ['127.0.0.1:3080', 'localhost:3080', '[::1]:3080', '0.0.0.0:3080']) {
+    const localOk = mockRes()
+    await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: { ...H, host: hostValue } }, localOk)
+    assert.equal(localOk.code, 200, 'local Host accepted: ' + hostValue)
+  }
+
   // self-test route: proves host half loaded, reports version
   const resSelf = mockRes()
   await byPath['/dsh-security-doctor/self-test'].handler({ method: 'GET', headers: H }, resSelf)
@@ -113,7 +127,7 @@ async function main() {
   assert.equal(res1.headers['cache-control'], 'no-store')
   const payload1 = JSON.parse(res1.body)
   assert.equal(payload1.ok, true)
-  assert.equal(payload1.report.checks.length, 7)
+  assert.equal(payload1.report.checks.length, 8)
   // v0.3 V3: the report states which plugin version produced it (client footer
   // + export/copy rely on it) and matches the self-test version
   assert.match(payload1.report.pluginVersion, /^\d+\.\d+\.\d+$/, 'report carries pluginVersion')
@@ -138,6 +152,22 @@ async function main() {
   const resLangJunk = mockRes()
   await byPath['/dsh-security-doctor/check'].handler({ method: 'GET', headers: H, url: '/dsh-security-doctor/check?lang=fr' }, resLangJunk)
   assert.equal(JSON.parse(resLangJunk.body).report.locale, 'zh', 'unknown lang falls back to zh')
+
+  // v0.7 (review #5): endpoint probing matches endpoint KEYS only — a
+  // URL-shaped setting under a non-endpoint key (docs, feedback…) must NOT
+  // be reported as an endpoint, while an aliased endpoint key at any depth is
+  const { ctx: ctxEp, registrations: regsEp } = makeCtx()
+  ctxEp.get = (key) => key === 'settings'
+    ? { config: { docs_url: 'https://docs.example.com/guide', feedback: 'https://feedback.example.com', llm: { baseURL: 'https://effective.example.com/v1' } } }
+    : makeCtx().ctx.get(key)
+  apply(ctxEp)
+  const checkEp = regsEp.filter((r) => r.path === '/dsh-security-doctor/check')[0]
+  const resEp = mockRes()
+  await checkEp.handler({ method: 'GET', headers: H }, resEp)
+  const endpoints = JSON.parse(resEp.body).report.checks.filter((c) => c.id === 'external-endpoints')[0]
+  assert.match(endpoints.detail, /settings 服务（实际生效）[^\n]*effective\.example\.com/, 'effective baseURL reported')
+  assert.ok(!endpoints.detail.includes('docs.example.com'), 'docs URL is not an endpoint (v0.7)')
+  assert.ok(!endpoints.detail.includes('feedback.example.com'), 'feedback URL is not an endpoint (v0.7)')
 
   // flip the fake policy to never → severity upgrades to high without reload
   const { ctx: ctx2, registrations: regs2 } = makeCtx()

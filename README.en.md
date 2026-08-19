@@ -25,12 +25,12 @@ The report footer states the producing version; a manual "Check update" button q
 > ⚠️ **Read first**: (1) a running `dsh web` does NOT hot-load new plugin layers — **restart `dsh web` after installing** or the button won't appear; (2) restarting briefly interrupts conversations — wind down first.
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0
 ```
 
-The `#v0.6.0` tag pins the exact released commit (reproducible, rollback-able; once published to npm: `dsh plugin --profile web add dsh-security-doctor`). Running DSH from a source checkout? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`, or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.6.0`.
+The `#v0.7.0` tag pins the exact released commit (reproducible, rollback-able; once published to npm: `dsh plugin --profile web add dsh-security-doctor`). Running DSH from a source checkout? From the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`, or `node --import tsx/esm apps/cli/src/bin.ts plugin --profile web add github:ChenChen913/dsh-security-doctor#v0.7.0`.
 
-Install self-verification (curl returns `ok:true` + console logs `[dsh-security-doctor] client loaded; host self-test: v0.6.0` + the button appears):
+Install self-verification (curl returns `ok:true` + console logs `[dsh-security-doctor] client loaded; host self-test: v0.7.0` + the button appears):
 
 ```bash
 curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/self-test
@@ -45,7 +45,7 @@ curl -H 'x-dsh-security-doctor: 1' http://127.0.0.1:3080/dsh-security-doctor/sel
 ## Security commitments
 
 1. **Read-only**: never executes code from checked objects, never modifies user files; the only external command is the Windows `icacls` read-only ACL query (fixed arguments, no shell, no user input).
-2. **Zero egress by default**: localhost GET routes require the pairing header `x-dsh-security-doctor: 1` (cross-site pages cannot read your report); no external domain exists in the code except the manual check-update query.
+2. **Zero egress by default**: localhost GET routes require the pairing header `x-dsh-security-doctor: 1` (cross-site pages cannot read your report); since v0.7.0 the `Host` header must also name a local address, blocking same-origin-spoofed reads under DNS rebinding; no external domain exists in the code except the manual check-update query.
 3. **Zero credential exposure**: permission bits/ACL only — contents are never read, sent, or echoed; echoed lines are auto-redacted; leak-free asserted by tests anyone can re-run.
 
 It audits itself first with its own published standard: [self-audit report](docs/SELF-AUDIT.md) · [security policy](SECURITY.md). Zero runtime dependencies, no install scripts, no build step (`node --check` verifiable); SHA-pinned CI actions, 3-OS × Node 22/24 matrix. Verify: `node test/smoke.mjs && node test/host.mjs && node test/client.mjs`.
@@ -58,7 +58,7 @@ It audits itself first with its own published standard: [self-audit report](docs
 
 ## Limitations (honest)
 
-Best-effort: "no findings" is not "safe". The egress scan is a first filter (obfuscated/runtime-assembled URLs invisible); POSIX mode bits are not the full ACL story; report bodies are currently Chinese; per-session policy overrides are not read; deep code review of external plugins stays with the [security-review guide](docs/guide-security-review.md).
+Best-effort: "no findings" is not "safe". The egress scan is a first filter (obfuscated/runtime-assembled URLs invisible; official `@deepseek-ai/*` packages are treated as a trust baseline and NOT scanned — transitive dependencies are covered since v0.7.0); POSIX mode bits are not the full ACL story; report bodies are bilingual (UI language or `?lang=`); per-session policy overrides are not read; deep code review of external plugins stays with the [security-review guide](docs/guide-security-review.md).
 
 Docs index: [CHANGELOG](CHANGELOG.md) (per-version changes + tested matrices) · [release checklist](docs/release.md) · [v0.5 fix plan](FIX-PLAN-v0.5.md) · [security-review](docs/guide-security-review.md) / [secure-development](docs/guide-secure-development.md) guides (installable `skills/` versions included).
 
@@ -66,6 +66,7 @@ Docs index: [CHANGELOG](CHANGELOG.md) (per-version changes + tested matrices) ·
 
 | Plugin | Tested harness | OS | Notes |
 | --- | --- | --- | --- |
+| v0.7.0 | DSH 0.1.0-rc.5 | Windows (source run) | Review-fix release: transitive-dep scanning, security-layer patch detection, Host-header guard; macOS/Linux via CI matrix; Node ≥ 22 |
 | v0.6.0 | DSH 0.1.0-rc.5 | Windows (source run) | macOS/Linux via CI matrix; Node ≥ 22 |
 | v0.5.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
 | v0.2.0 – v0.4.0 | DSH 0.1.0-rc.5 | Windows (source run) | same |
