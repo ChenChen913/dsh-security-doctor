@@ -4,6 +4,28 @@
 
 **发布规范**（v0.3.0 起固化，见 [docs/release.md](docs/release.md)）：每个版本打 annotated tag（`vX.Y.Z`）并附 GitHub Release，Release 正文含变更摘要、与上一版的 diff 链接、tag commit SHA 与实测 harness 版本矩阵。更新前请先看 [Releases](https://github.com/ChenChen913/dsh-security-doctor/releases) 或本文件的对应条目。
 
+## [1.1.0] — 2026-08-19
+
+体验修复轮：让"不懂计算机的使用者"也能一眼看懂报告（结论前置、证据收底的三明治结构）。
+
+### 新增
+
+- **出网扫描卡三明治渲染**：高危时首屏只回答三个问题——哪个插件（critical 三行卡：谁/为什么白话/怎么办白话）、为什么（"读密钥 + 对外发送"等组合命中的白话解释，直白风格，并诚实注明"共现不等于作恶"）、怎么办（"说不清就卸载它"）；提醒信号折叠为一行摘要条；完整技术清单二次折叠保留（复制 Markdown / 导出 JSON 仍含全量信息）。旧格式报告自动回退旧渲染。
+- **守护模式白话说明卡**：开关旁常驻一行小字「仅 DSH 运行时生效 · 关闭即停 · 卸载无残留」；「这是什么？」展开 4 问 4 答（做什么/占不占资源/发不发数据/关掉 DSH 还跑不跑——明确"不是系统服务，DSH 一关就彻底停止"）。
+
+### 修复
+
+- **自伤 bug**：C7 出网扫描不再把本插件自己列入高危清单（自身合法使用 child_process 跑 icacls 被组合规则误命中）；排除但在报告中明说，注明依据公开自审报告（docs/SELF-AUDIT.md）。
+- **文档域名降噪**：`example.com`/`json-schema.org`/`w3.org` 等规范/示例域名不再计入外联信号（之前 zod 文档里的 `example.com(×57)` 会虚增提醒数）；仍保留在技术清单中标注"仅文档/示例域名（已降噪）"。
+
+### 实测环境
+
+| 项 | 值 |
+| --- | --- |
+| harness | DSH `0.1.0-rc.5`（Windows，源码运行） |
+| OS | Windows 实测；macOS / Linux 由 CI（ubuntu/macos/windows × Node 22/24）覆盖 |
+| Node | ≥ 22 |
+
 ## [1.0.0] — 2026-08-19
 
 加固方案第三阶段：**守护模式**——插件从「医生」（定期体检）升级为可选的「监护仪」（持续观察）。运行时出站审计钩子 + 高价值文件变更哨兵，**实验特性、默认关闭、完全本地、卸载即回滚**（`ctx.effect` 登记，恢复原始模块导出）。哲学边界如实声明：进程内钩子是过渡手段，正解是上游暴露"插件发起网络连接"事件（已列入上游倡导）。
@@ -343,6 +365,9 @@ smoke：传递依赖 fixture（逐条 + 汇总两分支）、安全层补丁命�
 
 实测环境：DSH `0.1.0-rc.5`（Windows 源码运行）。
 
+[0.5.1]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.5.0...v0.5.1
+[1.1.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.7.1...v1.0.0
 [0.6.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ChenChen913/dsh-security-doctor/compare/v0.3.0...v0.4.0

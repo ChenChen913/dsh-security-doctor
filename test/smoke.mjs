@@ -127,6 +127,28 @@ async function buildFakeHome() {
     "import { readFileSync } from 'node:fs'\nexport const cfg = readFileSync('.env', 'utf8')\n")
   await fs.writeFile(path.join(splitDir, 'reporter.js'),
     "export function ping() { return fetch('https://split-benign.example/ping') }\n")
+  // v1.1.0 (UX review): doc-host noise fixture — the plugin's ONLY outbound
+  // strings are documentation/spec/example hosts; they must stay in the raw
+  // listing (marked 已降噪) but NOT count as an outbound signal
+  const docDir = path.join(profile, 'node_modules', 'dsh-doc-links')
+  await fs.mkdir(docDir, { recursive: true })
+  await fs.writeFile(path.join(docDir, 'package.json'), JSON.stringify({
+    name: 'dsh-doc-links', version: '1.0.0',
+  }))
+  await fs.writeFile(path.join(docDir, 'index.js'),
+    "export const docs = ['https://example.com/guide', 'https://json-schema.org/spec']\n")
+  // v1.1.0 (UX review): SELF-exclusion fixture — this plugin's own package
+  // name installed as an external dep with a deliberately combo-heavy file
+  // (cred read + egress in one file). C7 must skip it and SAY so, instead
+  // of reporting the doctor as a high-risk patient.
+  const selfDir = path.join(profile, 'node_modules', 'dsh-security-doctor', 'lib')
+  await fs.mkdir(selfDir, { recursive: true })
+  await fs.writeFile(path.join(profile, 'node_modules', 'dsh-security-doctor', 'package.json'), JSON.stringify({
+    name: 'dsh-security-doctor', version: '1.1.0',
+  }))
+  await fs.writeFile(path.join(selfDir, 'checks.js'),
+    "import { readFileSync } from 'node:fs'\n"
+    + "export const c = readFileSync('.env', 'utf8') + fetch('https://self-test.example/x')\n")
   // v0.8 (plan 0-4): install-script CONTENT — tiny-lib's postinstall runs
   // `node setup.js`, and setup.js shells curl at a destination: the script
   // chain must be scanned as a downloader, not just "has an install script"
@@ -250,7 +272,8 @@ async function main() {
   // flag (script-carrying ones line-by-line, quiet ones in a summary line),
   // and the report states the official-packages trust boundary explicitly
   assert.match(byId['third-party-plugins'].detail, /tiny-lib \(v0\.0\.1 \(transitive\)\)[^\n]*传递依赖、携带 prepare\/postinstall 安装脚本/)
-  assert.match(byId['third-party-plugins'].detail, /另有 2 个无风险标记的传递依赖：dsh-stealth-rider、dsh-pnpm-rider/, 'hoisted + pnpm riders both collapsed (v0.8)')
+  // v1.1.0: the doc-links fixture rides along as a third quiet transitive
+  assert.match(byId['third-party-plugins'].detail, /另有 3 个无风险标记的传递依赖：dsh-doc-links、dsh-stealth-rider、dsh-pnpm-rider/, 'hoisted + pnpm + doc riders collapsed (v0.8, v1.1.0)')
   assert.match(byId['third-party-plugins'].detail, /官方 @deepseek-ai\/\* 包按信任基线处理/)
   assert.ok(!byId['third-party-plugins'].detail.includes('dsh-base'))
   // 3.2-3: the self-lock advice uses the RUNNING version, never a stale tag
@@ -374,6 +397,42 @@ async function main() {
     const stealth = byName('dsh-stealth-rider')
     assert.equal(stealth.combos.length, 0, 'URL-only plugin: no combo (v0.8)')
     assert.equal(stealth.tier, 'low', 'URL-only plugin stays low-tier')
+  }
+
+  // v1.1.0 (UX review): doc-host muting + self-exclusion + conclusion-first
+  // tiers — FIX-PLAN-v1.1.0 §三.A/C/D, assertions §四
+  {
+    const per = byId['plugin-egress'].extra.perPlugin
+    const byName = (n) => per.filter((p) => p.name === n)[0]
+    const tiers = byId['plugin-egress'].extra.tiers
+    assert.ok(tiers, 'tiers ride the report (v1.1.0)')
+    // doc-host muting: signal list empty, raw layer keeps the marked hosts
+    const docOnly = byName('dsh-doc-links')
+    assert.ok(docOnly, 'doc-links fixture scanned (v1.1.0)')
+    assert.equal(docOnly.hosts.length, 0, 'doc hosts muted out of the signal list (v1.1.0)')
+    assert.ok(docOnly.docHosts.length >= 1, 'doc hosts still visible in the raw layer (v1.1.0)')
+    assert.match(byId['plugin-egress'].detail, /dsh-doc-links[^\n]*仅文档\/示例域名（已降噪）/,
+      'muted doc line rendered with its marker (v1.1.0)')
+    assert.ok(!tiers.advisory.some((a) => a.name === 'dsh-doc-links'),
+      'doc-only plugin does not enter advisories (v1.1.0)')
+    // self-exclusion: the doctor is never its own patient, and says so
+    assert.ok(!per.some((p) => p.name === 'dsh-security-doctor'),
+      'self excluded from the scanned list (v1.1.0)')
+    assert.ok(!byId['plugin-egress'].detail.includes('self-test.example'),
+      'self fixture egress invisible (v1.1.0)')
+    assert.ok(tiers.selfNote, 'selfNote explains the exclusion (v1.1.0)')
+    assert.match(tiers.selfNote, /SELF-AUDIT/, 'selfNote points at the public self-audit (v1.1.0)')
+    // tiers: critical carries the plain-language why/what, lead rides detail
+    const crit = tiers.critical.filter((c) => c.name === 'dsh-exfil-chain')[0]
+    assert.ok(crit, 'combo plugin in tiers.critical (v1.1.0)')
+    assert.match(crit.why, /读密钥/, 'plain-language why (v1.1.0)')
+    assert.match(crit.what, /卸载/, 'plain-language what-to-do (v1.1.0)')
+    assert.ok(tiers.critical.some((c) => c.name === 'tiny-lib'),
+      'install-script downloader also critical (v1.1.0)')
+    assert.match(byId['plugin-egress'].detail, /⚠ 2 个插件命中高危组合，请立即确认/,
+      'lead conclusion line rides detail for copy/export (v1.1.0)')
+    assert.ok(tiers.advisory.some((a) => a.name === 'dsh-evil-helper'),
+      'single-signal plugin enters advisories (v1.1.0)')
   }
 
   // 3.2-2: only-self inventory — pinned+script-free self is a quiet pass,

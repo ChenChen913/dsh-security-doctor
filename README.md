@@ -8,9 +8,9 @@ DeepSeek Harness（DSH）Web 界面的一键安全体检插件：侧栏「安全
 
 ## 功能
 
-- **分级报告**：环形评分（0–100）、高危置顶、趋势对比、修复处方单、复制 Markdown / 导出 JSON、中英双语
+- **分级报告**：结论前置（高危卡直接回答"哪个插件、为什么、怎么办"，技术明细折叠收底）、环形评分（0–100）、高危置顶、趋势对比、修复处方单、复制 Markdown / 导出 JSON、中英双语
 - **AI 深审**：可疑插件一键复制结构化深审提示词，交给自己的 Agent 审查，结论粘贴回填并锚定代码指纹（剪贴板闭环，零 API）
-- **守护模式**（实验、默认关）：运行时出站审计 + 高价值文件变更哨兵，见下文
+- **守护模式**（实验、默认关）：运行时出站审计 + 高价值文件变更哨兵，开关旁有白话说明（关掉 DSH 即彻底停止），见下文
 
 ## 检查项
 
@@ -38,10 +38,10 @@ DeepSeek Harness（DSH）Web 界面的一键安全体检插件：侧栏「安全
 > ⚠️ 装完必须**重启 `dsh web`** 才生效（运行中的实例不热加载；重启会短暂中断对话，先保存）。
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.1.0
 ```
 
-`#v1.0.0` 锁定版本标签（可复现、可回退）；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`；源码运行 DSH 的在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0`。
+`#v1.1.0` 锁定版本标签（可复现、可回退）；npm 发布后可直接 `dsh plugin --profile web add dsh-security-doctor`；源码运行 DSH 的在 harness 仓库内执行 `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.1.0`。
 
 验证安装（返回 `ok:true` 且侧栏出现按钮即成功）：
 

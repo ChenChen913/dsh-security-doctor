@@ -10,7 +10,7 @@ A one-click **local security checkup plugin** for the DeepSeek Harness (DSH) Web
 
 - **Graded report**: circular 0–100 score, high cards first, trend vs the last checkup, one-click repair "prescriptions", copy-markdown / export-json, zh/en UI
 - **AI deep review**: one-click structured review prompt for suspicious plugins — run it with your own agent, paste conclusions back, anchored to code fingerprints (clipboard loop, zero API)
-- **Guard mode** (experimental, default off): runtime outbound auditing + a high-value file-change sentinel — see below
+- **Guard mode** (experimental, default off): runtime outbound auditing + a high-value file-change sentinel, with a plain-language briefing at the switch (turning DSH off stops it entirely) — see below
 
 ## What it checks
 
@@ -38,10 +38,10 @@ A switch in the report footer. On, the plugin shifts from "doctor" (periodic che
 > ⚠️ **Restart `dsh web` after installing** — a running instance does not hot-load plugin layers (restarting briefly interrupts conversations; wind down first).
 
 ```bash
-dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0
+dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.1.0
 ```
 
-The `#v1.0.0` tag pins the exact release (reproducible, rollback-able); once on npm: `dsh plugin --profile web add dsh-security-doctor`; from a source checkout, run inside the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.0.0`.
+The `#v1.1.0` tag pins the exact release (reproducible, rollback-able); once on npm: `dsh plugin --profile web add dsh-security-doctor`; from a source checkout, run inside the harness repo: `pnpm dsh plugin --profile web add github:ChenChen913/dsh-security-doctor#v1.1.0`.
 
 Verify (returns `ok:true` and the button appears in the sidebar):
 

@@ -1194,6 +1194,129 @@ async function main() {
   const swAfter = guardOff.nodes.filter((n) => n.props.role === 'switch')[0]
   assert.equal(swAfter.props['aria-checked'], 'false', 'switch reflects the OFF state')
   console.log('CLIENT OK (v1.0.0 3-2/3-4) — sentinel badge/consume + toggle-off stops everything')
+
+  // ── v1.1.0 (UX review): conclusion-first egress tiers + guard briefing ──
+  // The egress card rides engine tiers: layer-1 critical three-liners answer
+  // WHAT/WHY/WHAT-TO-DO in plain language and stay visible; advisories fold
+  // behind their own toggle; the raw technical listing folds behind another.
+  // Guard mode gains a visible one-liner + a "这是什么?" briefing card.
+  store.delete('dsd.cachedReport')
+  store.set('dsd.guard', JSON.stringify('0'))
+  checkPayload = {
+    ...sampleReport,
+    generatedAt: new Date(Date.now() + 40000).toISOString(),
+    checks: [
+      {
+        id: 'plugin-egress', title: '已装插件出网扫描', severity: 'high', status: 'finding',
+        detail: '⚠ 1 个插件命中高危组合，请立即确认。\n\n'
+          + '- dsh-bad-a：combo.example；⚠ 动态/混淆特征（静态扫描无法覆盖）：raw net/dns/process import；组合命中（×1）：疑似凭据外发链\n'
+          + '- dsh-ok-a：源码中未发现外联地址\n'
+          + '- dsh-mid-a：mid.example；意图特征信号（单特征，仅供复核）：敏感环境变量键：DEEPSEEK_API_KEY\n'
+          + '（组合命中是文件级共现，不是被证实的数据流——按高优先级复核对象对待，不等于定论。）',
+        advice: '审',
+        extra: {
+          perPlugin: [
+            { name: 'dsh-bad-a', dir: 'C:\\Users\\t\\.dsh\\profiles\\web\\node_modules\\dsh-bad-a',
+              hosts: [['combo.example', 1]], suspicious: [['raw net/dns/process import', 1]],
+              signals: { emailSamples: [], bareHosts: [], envKeys: [], credHits: 1, mailHits: 0, envHits: 0, keyHits: 0, singles: 1 },
+              combos: [['cred-exfil', 1]], comboFiles: ['lib/steal.js'], injection: [], installScriptHits: null,
+              score: 70, tier: 'high', tree: null },
+            { name: 'dsh-ok-a', hosts: [], suspicious: [], signals: { emailSamples: [], bareHosts: [], envKeys: [], credHits: 0, mailHits: 0, envHits: 0, keyHits: 0, singles: 0 }, combos: [], comboFiles: [], injection: [], installScriptHits: null, score: 0, tier: 'low', tree: null },
+            { name: 'dsh-mid-a', hosts: [['mid.example', 1]], suspicious: [],
+              signals: { emailSamples: [], bareHosts: [], envKeys: ['DEEPSEEK_API_KEY'], credHits: 0, mailHits: 0, envHits: 1, keyHits: 0, singles: 1 },
+              combos: [], comboFiles: [], injection: [], installScriptHits: null, score: 25, tier: 'medium', tree: null },
+          ],
+          tiers: {
+            critical: [
+              { name: 'dsh-bad-a',
+                why: '同一份文件里同时出现「读密钥」和「对外发送」的代码——拼起来就是一条把你的密钥偷运出去的完整通道',
+                what: '这是能力共现，不等于一定在作恶——但说不清来源的插件不该带这种组合。确认你认识这个插件、知道它从哪来的；说不清就卸载它。',
+                files: ['lib/steal.js'], combos: [['cred-exfil', 1]] },
+            ],
+            advisory: [
+              { name: 'dsh-mid-a', summary: '会访问 mid.example；读取密钥类环境变量（DEEPSEEK_API_KEY）——它本就要调用对应服务则属正常' },
+            ],
+            cleanCount: 1, opaqueCount: 0,
+            selfNote: '本插件自身不列入扫描（已按公开自审报告核查：仓库 docs/SELF-AUDIT.md）。',
+          },
+        },
+      },
+    ],
+  }
+  hookStates = []
+  resetHooks()
+  const modTiers = capturedModule.factory((n) => {
+    if (n === 'react') return React
+    throw new Error('unexpected require: ' + n)
+  })
+  let slotTiers = null
+  modTiers.apply({
+    effect(fn) { fn(); return () => {} },
+    slots: {
+      inject(slotName, register) { const d = register(); return () => d() },
+      register(spec, render) { slotTiers = { spec, render }; return () => { slotTiers = null } },
+    },
+  })
+  renderAndCollect(slotTiers) // mount: auto checkup
+  await settle()
+  renderAndCollect(slotTiers).el.props.onClick()
+  await settle()
+  hookStates[0] = 'open'
+  const tierView = renderAndCollect(slotTiers)
+  // layer 1: lead + critical three-liner + selfNote, all visible by default
+  assert.ok(tierView.text.includes('⚠ 1 个插件命中高危组合'), 'lead conclusion visible (v1.1.0)')
+  assert.ok(tierView.text.includes('dsh-bad-a'), 'critical plugin named (v1.1.0)')
+  assert.ok(tierView.text.includes('偷运出去的完整通道'), 'plain-language WHY visible (v1.1.0)')
+  assert.ok(tierView.text.includes('说不清就卸载它'), 'plain-language WHAT-TO-DO visible (v1.1.0)')
+  assert.ok(tierView.text.includes('SELF-AUDIT'), 'self-exclusion note visible (v1.1.0)')
+  const critBtn = tierView.nodes.filter((n) => typeof n.props.className === 'string'
+    && /dsd-critical/.test(n.props.className))
+  assert.ok(critBtn.length > 0, 'critical block carries its own surface (v1.1.0)')
+  // layer 2: advisory folded — count text present, row summary hidden
+  assert.ok(tierView.text.includes('1 个插件带提醒信号'), 'advisory fold shows the count (v1.1.0)')
+  assert.ok(!tierView.text.includes('mid.example'), 'advisory rows hidden until expanded (v1.1.0)')
+  // layer 3: raw listing folded — the raw host line invisible by default
+  assert.ok(tierView.text.includes('查看完整技术清单'), 'raw-listing fold present (v1.1.0)')
+  assert.ok(!tierView.text.includes('combo.example'), 'raw rows hidden until expanded (v1.1.0)')
+  // deep-review button rides the critical block (marker entry present)
+  const critDeep = tierView.nodes.filter((n) => n.type === 'button'
+    && typeof n.props.className === 'string' && /dsd-mini--ghost/.test(n.props.className))
+  assert.ok(critDeep.length === 1, 'critical block owns the deep-review button (v1.1.0)')
+  // expand layer 2
+  const advToggle = tierView.nodes.filter((n) => typeof n.props.className === 'string'
+    && /dsd-advisory__toggle/.test(n.props.className))[0]
+  advToggle.props.onClick()
+  const advView = renderAndCollect(slotTiers)
+  assert.ok(advView.text.includes('mid.example'), 'advisory rows appear on toggle (v1.1.0)')
+  assert.ok(advView.text.includes('则属正常'), 'advisory summary carries the plain-language caveat (v1.1.0)')
+  // expand layer 3
+  const rawBtn = advView.nodes.filter((n) => n.type === 'button'
+    && n.children.join('').includes('查看完整技术清单'))[0]
+  rawBtn.props.onClick()
+  const rawView = renderAndCollect(slotTiers)
+  assert.ok(rawView.text.includes('combo.example'), 'raw rows appear on toggle (v1.1.0)')
+  assert.ok(rawView.text.includes('技术明细，供专业人员核查'), 'raw layer labeled for professionals (v1.1.0)')
+  assert.ok(rawView.text.includes('源码中未发现外联地址'), 'raw quiet row still rendered (v1.1.0)')
+  assert.ok(!rawView.text.includes('⚠ 1 个插件命中高危组合，请立即确认。 ⚠ 1 个插件命中高危组合'),
+    'lead never renders twice after expansion (v1.1.0)')
+  // guard briefing: visible one-liner + fold-out card
+  assert.ok(rawView.text.includes('仅 DSH 运行时生效'), 'guard one-liner always visible (v1.1.0)')
+  assert.ok(!rawView.text.includes('关掉 DSH 后它还在后台运行吗'), 'guard briefing folded by default (v1.1.0)')
+  const whatBtn = rawView.nodes.filter((n) => typeof n.props.className === 'string'
+    && /dsd-guardbar__what/.test(n.props.className))[0]
+  whatBtn.props.onClick()
+  const helpView = renderAndCollect(slotTiers)
+  assert.ok(helpView.text.includes('关掉 DSH 后它还在后台运行吗'), 'briefing answers the afterlife question (v1.1.0)')
+  assert.ok(helpView.text.includes('不会。它不是系统服务'), 'briefing states plainly: no background survival (v1.1.0)')
+  assert.ok(helpView.text.includes('刷新页面即消失'), 'briefing covers the data-retention question (v1.1.0)')
+  // re-grab the button from the LATEST render — the fake's closures bind the
+  // render-time state, so clicking the stale element would flip back to true
+  const whatBtnOpen = helpView.nodes.filter((n) => typeof n.props.className === 'string'
+    && /dsd-guardbar__what/.test(n.props.className))[0]
+  whatBtnOpen.props.onClick()
+  const helpClosed = renderAndCollect(slotTiers)
+  assert.ok(!helpClosed.text.includes('关掉 DSH 后它还在后台运行吗'), 'briefing folds back (v1.1.0)')
+  console.log('CLIENT OK (v1.1.0) — conclusion-first tiers + advisory/raw folds + guard briefing card')
 }
 
 main().then(
